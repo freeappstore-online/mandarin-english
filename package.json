@@ -1,0 +1,14 @@
+{
+  "name": "mandarin-english",
+  "private": true,
+  "packageManager": "pnpm@10.30.3",
+  "engines": { "node": ">=22" },
+  "pnpm": { "onlyBuiltDependencies": ["esbuild"] },
+  "scripts": {
+    "dev": "pnpm --filter @mandarin-english/web dev",
+    "build": "pnpm --filter @mandarin-english/web build",
+    "preview": "pnpm --filter @mandarin-english/web preview",
+    "typecheck": "pnpm --filter @mandarin-english/web exec tsc -b",
+    "test": "pnpm --filter @mandarin-english/web test"
+  }
+}
