@@ -812,7 +812,20 @@ function PracticeView({
         </span>
         <button
           type="button"
-          onClick={() => setFullscreen(true)}
+          onClick={() => {
+            // Request real OS fullscreen synchronously inside the click
+            // handler so iOS Safari + strict browsers accept it (they
+            // require an active user gesture). Calling this from the
+            // FullscreenView's useEffect was too late — the gesture
+            // window had already closed and the request was rejected.
+            const root = document.documentElement;
+            if (root.requestFullscreen) {
+              root.requestFullscreen().catch(() => {
+                // Denied — modal still works as full-viewport.
+              });
+            }
+            setFullscreen(true);
+          }}
           style={{ ...secondaryButton, padding: "0.45rem 0.9rem", fontSize: "0.85rem" }}
         >
           ⛶ Full screen
@@ -913,19 +926,28 @@ function FullscreenView({
 }) {
   const p = phrases[index]!;
 
+  // OS-level fullscreen is engaged by the click handler on the trigger
+  // button (sync, inside the user gesture). Here we just ensure we exit
+  // OS fullscreen when the modal closes for any reason.
   useEffect(() => {
-    // Try to enter actual browser fullscreen; if denied (e.g. user
-    // gesture rules, iframe restrictions), the modal still works.
-    const root = document.documentElement;
-    if (root.requestFullscreen) {
-      root.requestFullscreen().catch(() => {});
-    }
     return () => {
       if (document.fullscreenElement && document.exitFullscreen) {
         document.exitFullscreen().catch(() => {});
       }
     };
   }, []);
+
+  // Sync modal state with OS fullscreen: if the user presses Esc / F11 /
+  // swipes-down to leave OS fullscreen, close our modal too. Otherwise
+  // they'd be stuck looking at the modal with no chrome cue that they
+  // can exit.
+  useEffect(() => {
+    function onFullscreenChange() {
+      if (!document.fullscreenElement) onClose();
+    }
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
+  }, [onClose]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
