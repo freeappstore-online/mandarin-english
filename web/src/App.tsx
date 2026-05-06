@@ -772,6 +772,7 @@ function PracticeView({
   onResetAll: () => void;
 }) {
   const [index, setIndex] = useState(0);
+  const [fullscreen, setFullscreen] = useState(false);
 
   if (phrases.length === 0) {
     return (
@@ -785,10 +786,37 @@ function PracticeView({
   const p = phrases[safeIndex]!;
   const allPractised = phrases.every((q) => q.practiced);
 
+  function next() {
+    setIndex((i) => (i + 1) % phrases.length);
+  }
+  function prev() {
+    setIndex((i) => (i - 1 + phrases.length) % phrases.length);
+  }
+  function gotIt() {
+    onMarkPractised(p.id);
+    next();
+  }
+
   return (
     <div>
-      <div style={{ color: "var(--muted)", fontSize: "0.85rem", marginBottom: "1.25rem" }}>
-        {safeIndex + 1} / {phrases.length}
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          marginBottom: "1.25rem",
+        }}
+      >
+        <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
+          {safeIndex + 1} / {phrases.length}
+        </span>
+        <button
+          type="button"
+          onClick={() => setFullscreen(true)}
+          style={{ ...secondaryButton, padding: "0.45rem 0.9rem", fontSize: "0.85rem" }}
+        >
+          ⛶ Full screen
+        </button>
       </div>
 
       <div
@@ -822,28 +850,13 @@ function PracticeView({
       </div>
 
       <div style={{ display: "flex", gap: "0.6rem", marginTop: "1.25rem", flexWrap: "wrap" }}>
-        <button
-          type="button"
-          style={secondaryButton}
-          onClick={() => setIndex((i) => (i - 1 + phrases.length) % phrases.length)}
-        >
+        <button type="button" style={secondaryButton} onClick={prev}>
           ← Previous
         </button>
-        <button
-          type="button"
-          style={primaryButton}
-          onClick={() => {
-            onMarkPractised(p.id);
-            setIndex((i) => (i + 1) % phrases.length);
-          }}
-        >
+        <button type="button" style={primaryButton} onClick={gotIt}>
           Got it — next →
         </button>
-        <button
-          type="button"
-          style={secondaryButton}
-          onClick={() => setIndex((i) => (i + 1) % phrases.length)}
-        >
+        <button type="button" style={secondaryButton} onClick={next}>
           Skip
         </button>
       </div>
@@ -864,9 +877,205 @@ function PracticeView({
           </button>
         </div>
       )}
+
+      {fullscreen && (
+        <FullscreenView
+          phrases={phrases}
+          index={safeIndex}
+          onPrev={prev}
+          onNext={next}
+          onClose={() => setFullscreen(false)}
+        />
+      )}
     </div>
   );
 }
+
+/**
+ * Big-text presentation mode for showing the phrase to the person you're
+ * speaking with. Tap the left half = previous, right half = next. Esc or
+ * the × button exits. Tries to engage the browser's real fullscreen API
+ * (so notches / browser chrome get out of the way) but works without it
+ * — the modal is full-viewport either way.
+ */
+function FullscreenView({
+  phrases,
+  index,
+  onPrev,
+  onNext,
+  onClose,
+}: {
+  phrases: Phrase[];
+  index: number;
+  onPrev: () => void;
+  onNext: () => void;
+  onClose: () => void;
+}) {
+  const p = phrases[index]!;
+
+  useEffect(() => {
+    // Try to enter actual browser fullscreen; if denied (e.g. user
+    // gesture rules, iframe restrictions), the modal still works.
+    const root = document.documentElement;
+    if (root.requestFullscreen) {
+      root.requestFullscreen().catch(() => {});
+    }
+    return () => {
+      if (document.fullscreenElement && document.exitFullscreen) {
+        document.exitFullscreen().catch(() => {});
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowLeft") onPrev();
+      else if (e.key === "ArrowRight") onNext();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose, onPrev, onNext]);
+
+  return (
+    <div
+      role="dialog"
+      aria-label="Phrase fullscreen"
+      style={{
+        position: "fixed",
+        inset: 0,
+        background: "var(--paper)",
+        zIndex: 1000,
+        display: "grid",
+        gridTemplateRows: "auto 1fr auto",
+      }}
+    >
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "0.75rem 1rem",
+          borderBottom: "1px solid var(--line)",
+        }}
+      >
+        <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
+          {index + 1} / {phrases.length}
+          {p.topic && <> · {p.topic}</>}
+        </span>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Exit fullscreen"
+          style={{
+            background: "transparent",
+            border: "1px solid var(--line)",
+            color: "var(--ink)",
+            padding: "0.4rem 0.7rem",
+            borderRadius: "0.5rem",
+            fontFamily: "inherit",
+            fontSize: "0.85rem",
+            cursor: "pointer",
+          }}
+        >
+          ✕ Close
+        </button>
+      </div>
+
+      <div
+        style={{
+          position: "relative",
+          display: "grid",
+          alignContent: "center",
+          textAlign: "center",
+          padding: "1.5rem",
+          gap: "1rem",
+          overflow: "auto",
+        }}
+      >
+        <p
+          style={{
+            fontSize: "clamp(2rem, 9vw, 5rem)",
+            fontWeight: 700,
+            lineHeight: 1.2,
+            wordBreak: "break-word",
+          }}
+        >
+          {p.target}
+        </p>
+        {p.pronunciation && (
+          <p
+            style={{
+              color: "var(--muted)",
+              fontStyle: "italic",
+              fontSize: "clamp(1rem, 3.5vw, 1.75rem)",
+            }}
+          >
+            {p.pronunciation}
+          </p>
+        )}
+        <p
+          style={{
+            color: "var(--muted)",
+            fontSize: "clamp(1rem, 3vw, 1.5rem)",
+          }}
+        >
+          {p.native}
+        </p>
+
+        {/* Tappable halves: left half = prev, right half = next.
+            Sit above the text so the whole viewport is interactive,
+            but transparent so the text underneath stays readable.
+            aria-label so screen readers can find them. */}
+        <button
+          type="button"
+          aria-label="Previous phrase"
+          onClick={onPrev}
+          style={tapZoneLeft}
+        />
+        <button
+          type="button"
+          aria-label="Next phrase"
+          onClick={onNext}
+          style={tapZoneRight}
+        />
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          padding: "0.75rem 1.25rem",
+          borderTop: "1px solid var(--line)",
+          color: "var(--muted)",
+          fontSize: "0.82rem",
+        }}
+      >
+        <span>← tap left for previous</span>
+        <span>tap right for next →</span>
+      </div>
+    </div>
+  );
+}
+
+const tapZoneLeft: React.CSSProperties = {
+  position: "absolute",
+  top: 0,
+  left: 0,
+  width: "50%",
+  height: "100%",
+  background: "transparent",
+  border: 0,
+  cursor: "pointer",
+  // No focus ring — would distract from the phrase. Keyboard users
+  // get arrow-key navigation instead.
+  outline: "none",
+};
+
+const tapZoneRight: React.CSSProperties = {
+  ...tapZoneLeft,
+  left: "50%",
+};
 
 const primaryButton: React.CSSProperties = {
   background: "var(--accent)",
