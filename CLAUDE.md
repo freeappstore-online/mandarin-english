@@ -32,8 +32,7 @@
 
 ## Platform Docs & Publishing
 - **Full AI guide:** https://raw.githubusercontent.com/freeappstore-online/freeappstore/main/SKILLS.md
-- **Store registry:** ~/dev/fas/infra/freeappstore/registry.json (add app here to list on store)
-- **Store site:** ~/dev/fas/infra/freeappstore/ (auto-deploys on push)
-- **Publish script:** ~/dev/fas/infra/freeappstore/scripts/publish.sh
+- **Store registry:** ~/dev/fas/freeappstore/registry.json (add app here to list on store)
+- **Store site:** ~/dev/fas/freeappstore/ (auto-deploys on push)
 - **Deploy:** Push to main auto-deploys via GitHub Actions. No manual steps needed.
 - **DNS/domains:** See SKILLS.md for CF API commands
