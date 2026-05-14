@@ -31,7 +31,7 @@
 - MIT license
 
 ## Platform Docs & Publishing
-- **Full AI guide:** https://raw.githubusercontent.com/freeappstore-online/ops/main/SKILLS.md
+- **Full AI guide:** https://raw.githubusercontent.com/freeappstore-online/freeappstore/main/SKILLS.md
 - **Store registry:** ~/dev/fas/infra/freeappstore/registry.json (add app here to list on store)
 - **Store site:** ~/dev/fas/infra/freeappstore/ (auto-deploys on push)
 - **Publish script:** ~/dev/fas/infra/freeappstore/scripts/publish.sh
