@@ -215,20 +215,22 @@ export default function App() {
     return Array.from(seen.values());
   }, [phrases, pair]);
 
-  const filtered = useMemo(() => {
+  const pairPhrases = useMemo(() => {
     return phrases
       .filter((p) => p.nativeLang === pair.nativeLang && p.targetLang === pair.targetLang)
-      .filter((p) => (topicFilter ? p.topic === topicFilter : true))
-      .filter((p) => (showOnlyUnpractised ? !p.practiced : true))
       .sort((a, b) => b.createdAt - a.createdAt);
-  }, [phrases, pair, topicFilter, showOnlyUnpractised]);
+  }, [phrases, pair]);
+
+  const filtered = useMemo(() => {
+    return pairPhrases
+      .filter((p) => (topicFilter ? p.topic === topicFilter : true))
+      .filter((p) => (showOnlyUnpractised ? !p.practiced : true));
+  }, [pairPhrases, topicFilter, showOnlyUnpractised]);
 
   const topics = useMemo(() => {
-    const set = new Set(
-      phrases.filter((p) => p.nativeLang === pair.nativeLang && p.targetLang === pair.targetLang).map((p) => p.topic).filter(Boolean),
-    );
+    const set = new Set(pairPhrases.map((p) => p.topic).filter(Boolean));
     return Array.from(set).sort();
-  }, [phrases, pair]);
+  }, [pairPhrases]);
 
   function add(p: Omit<Phrase, "id" | "practiced" | "createdAt">) {
     setPhrases((prev) => [{ ...p, id: newId(), practiced: false, createdAt: Date.now() }, ...prev]);
@@ -268,7 +270,7 @@ export default function App() {
 
           {tab === "practice" && (
             <PracticeTab
-              phrases={filtered}
+              phrases={pairPhrases}
               onMarkPractised={(id) => update(id, { practiced: true })}
               onResetAll={resetPracticed}
             />
