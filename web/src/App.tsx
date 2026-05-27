@@ -689,20 +689,27 @@ function AddForm({
   const targetIsUserTyped = useRef(true);
   const nativeIsUserTyped = useRef(true);
 
-  // Auto-translate target -> native (user types in target field)
+  const translateVersion = useRef(0);
+  const nativeRef = useRef(native);
+  nativeRef.current = native;
+  const targetRef = useRef(target);
+  targetRef.current = target;
+
   const handleTargetChange = useCallback(
     (val: string) => {
       setTarget(val);
       targetIsUserTyped.current = true;
       if (targetTimerRef.current) clearTimeout(targetTimerRef.current);
-      if (!nativeIsUserTyped.current) {
-        // native was auto-filled from a previous target change, clear stale flag
-        nativeIsUserTyped.current = true;
+      if (!val.trim()) {
+        setTranslatingField(null);
+        return;
       }
-      if (val.trim()) {
+      if (!nativeIsUserTyped.current || !nativeRef.current.trim()) {
         setTranslatingField("native");
+        const version = ++translateVersion.current;
         targetTimerRef.current = setTimeout(() => {
           autoTranslate(val, pair.targetLang, pair.nativeLang).then((result) => {
+            if (version !== translateVersion.current) return;
             if (result) {
               nativeIsUserTyped.current = false;
               setNative(result);
@@ -710,26 +717,26 @@ function AddForm({
             setTranslatingField(null);
           });
         }, 500);
-      } else {
-        setTranslatingField(null);
       }
     },
     [pair.targetLang, pair.nativeLang],
   );
 
-  // Auto-translate native -> target (user types in native field)
   const handleNativeChange = useCallback(
     (val: string) => {
       setNative(val);
       nativeIsUserTyped.current = true;
       if (nativeTimerRef.current) clearTimeout(nativeTimerRef.current);
-      if (!targetIsUserTyped.current) {
-        targetIsUserTyped.current = true;
+      if (!val.trim()) {
+        setTranslatingField(null);
+        return;
       }
-      if (val.trim()) {
+      if (!targetIsUserTyped.current || !targetRef.current.trim()) {
         setTranslatingField("target");
+        const version = ++translateVersion.current;
         nativeTimerRef.current = setTimeout(() => {
           autoTranslate(val, pair.nativeLang, pair.targetLang).then((result) => {
+            if (version !== translateVersion.current) return;
             if (result) {
               targetIsUserTyped.current = false;
               setTarget(result);
@@ -737,8 +744,6 @@ function AddForm({
             setTranslatingField(null);
           });
         }, 500);
-      } else {
-        setTranslatingField(null);
       }
     },
     [pair.nativeLang, pair.targetLang],
@@ -968,7 +973,7 @@ function PhraseRow({
             <button type="button" onClick={() => setEditing(true)} style={linkButton}>
               Edit
             </button>
-            <button type="button" onClick={() => onRemove(phrase.id)} style={linkButton}>
+            <button type="button" onClick={() => { if (confirm("Delete this phrase?")) onRemove(phrase.id); }} style={linkButton}>
               Delete
             </button>
           </div>
@@ -1036,6 +1041,10 @@ function PracticeView({
   const [index, setIndex] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
 
+  useEffect(() => {
+    setIndex((i) => (phrases.length > 0 ? Math.min(i, phrases.length - 1) : 0));
+  }, [phrases.length]);
+
   if (phrases.length === 0) {
     return (
       <p style={{ color: "var(--muted)", padding: "2rem 0", textAlign: "center" }}>
@@ -1056,7 +1065,7 @@ function PracticeView({
   }
   function gotIt() {
     onMarkPractised(p.id);
-    next();
+    if (safeIndex < phrases.length - 1) next();
   }
 
   return (
