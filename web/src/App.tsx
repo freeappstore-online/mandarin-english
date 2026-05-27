@@ -335,22 +335,90 @@ export default function App() {
 }
 
 function Header() {
+  const [showInfo, setShowInfo] = useState(false);
   return (
-    <div style={{ marginBottom: "1.5rem" }}>
+    <div style={{ marginBottom: "1rem", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
       <h1
         style={{
           fontFamily: "Fraunces, serif",
-          fontSize: "1.75rem",
+          fontSize: "1.5rem",
           fontWeight: 800,
-          marginBottom: "0.25rem",
+          margin: 0,
         }}
       >
-        Phrase prep
+        Phrases
       </h1>
-      <p style={{ color: "var(--muted)", lineHeight: 1.55 }}>
-        Pick a language pair, add the lines you want to say at the meetup, then practise them out loud
-        before you speak with strangers. Any languages — all saved in your browser.
-      </p>
+      <button
+        type="button"
+        onClick={() => setShowInfo((v) => !v)}
+        style={{
+          background: "transparent",
+          border: "1px solid var(--line)",
+          borderRadius: "50%",
+          width: "28px",
+          height: "28px",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          cursor: "pointer",
+          color: "var(--muted)",
+          fontSize: "0.85rem",
+          fontWeight: 700,
+          fontFamily: "inherit",
+          flexShrink: 0,
+        }}
+        title="About this app"
+        aria-label="About this app"
+      >
+        ?
+      </button>
+      {showInfo && (
+        <div
+          role="dialog"
+          aria-label="About Phrases"
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.4)",
+            zIndex: 999,
+            display: "grid",
+            placeItems: "center",
+            padding: "1rem",
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShowInfo(false); }}
+        >
+          <div
+            style={{
+              background: "var(--paper)",
+              border: "1px solid var(--line)",
+              borderRadius: "1rem",
+              padding: "1.5rem",
+              maxWidth: "420px",
+              width: "100%",
+            }}
+          >
+            <h2 style={{ fontFamily: "Fraunces, serif", fontSize: "1.25rem", fontWeight: 800, marginBottom: "0.75rem" }}>
+              About Phrases
+            </h2>
+            <p style={{ color: "var(--muted)", lineHeight: 1.6, fontSize: "0.9rem", marginBottom: "0.5rem" }}>
+              Pick a language pair, add the lines you want to say, then practise them out loud. Tap any phrase to hear it spoken.
+            </p>
+            <p style={{ color: "var(--muted)", lineHeight: 1.6, fontSize: "0.9rem", marginBottom: "0.5rem" }}>
+              Type in either field and the other auto-translates. Set your native language in Settings for best results.
+            </p>
+            <p style={{ color: "var(--muted)", lineHeight: 1.6, fontSize: "0.9rem", marginBottom: "1rem" }}>
+              Everything is saved in your browser. Any languages supported.
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowInfo(false)}
+              style={{ ...primaryButton, width: "100%" }}
+            >
+              Got it
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

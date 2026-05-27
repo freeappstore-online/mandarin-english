@@ -34,9 +34,9 @@ export default defineConfig({
         ],
       },
       manifest: {
-        name: "mandarin-english",
-        short_name: "mandarin-english",
-        description: "mandarin-english \u2014 free forever",
+        name: "Phrases",
+        short_name: "Phrases",
+        description: "Translate and practise phrases in any language",
         start_url: '/',
         display: 'standalone',
         background_color: "#ffffff",
