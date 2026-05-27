@@ -204,6 +204,16 @@ function newId(): string {
   return `p-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+function speak(text: string, lang: string) {
+  if (!window.speechSynthesis) return;
+  window.speechSynthesis.cancel();
+  const u = new SpeechSynthesisUtterance(text);
+  const code = LANG_CODES[lang];
+  if (code) u.lang = code;
+  u.rate = 0.85;
+  window.speechSynthesis.speak(u);
+}
+
 type View = "list" | "practice";
 
 export default function App() {
@@ -302,7 +312,6 @@ export default function App() {
         {view === "list" ? (
           <ListView
             pair={pair}
-            nativeLang={nativeLang}
             phrases={filtered}
             topics={topics}
             topicFilter={topicFilter}
@@ -596,7 +605,6 @@ function ViewTabs({ view, onChange }: { view: View; onChange: (v: View) => void 
 
 function ListView(props: {
   pair: Pair;
-  nativeLang: string;
   phrases: Phrase[];
   topics: string[];
   topicFilter: string;
@@ -609,7 +617,7 @@ function ListView(props: {
 }) {
   return (
     <>
-      <AddForm pair={props.pair} nativeLang={props.nativeLang} onAdd={props.onAdd} />
+      <AddForm pair={props.pair} onAdd={props.onAdd} />
 
       {(props.topics.length > 0 || props.showOnlyUnpractised) && (
         <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", margin: "1rem 0 0.75rem" }}>
@@ -661,11 +669,9 @@ function ListView(props: {
 
 function AddForm({
   pair,
-  nativeLang,
   onAdd,
 }: {
   pair: Pair;
-  nativeLang: string;
   onAdd: (p: Omit<Phrase, "id" | "practiced" | "createdAt">) => void;
 }) {
   const [target, setTarget] = useState("");
@@ -683,21 +689,17 @@ function AddForm({
   const targetIsUserTyped = useRef(true);
   const nativeIsUserTyped = useRef(true);
 
-  // Determine which field is "what the user types natively" vs "what needs
-  // translating". If the pair's nativeLang matches the user's global native
-  // language, the user types in the "native" field and auto-translates to
-  // "target". Otherwise, the user types in the "target" field and we
-  // auto-translate to "native".
-  const userTypesNative = pair.nativeLang === nativeLang;
-
-  // Auto-translate target -> native (user types target)
+  // Auto-translate target -> native (user types in target field)
   const handleTargetChange = useCallback(
     (val: string) => {
       setTarget(val);
       targetIsUserTyped.current = true;
       if (targetTimerRef.current) clearTimeout(targetTimerRef.current);
-      // Only auto-translate if user typed this AND the user's flow goes this direction
-      if (!userTypesNative && val.trim()) {
+      if (!nativeIsUserTyped.current) {
+        // native was auto-filled from a previous target change, clear stale flag
+        nativeIsUserTyped.current = true;
+      }
+      if (val.trim()) {
         setTranslatingField("native");
         targetTimerRef.current = setTimeout(() => {
           autoTranslate(val, pair.targetLang, pair.nativeLang).then((result) => {
@@ -708,21 +710,23 @@ function AddForm({
             setTranslatingField(null);
           });
         }, 500);
-      } else if (!val.trim()) {
+      } else {
         setTranslatingField(null);
       }
     },
-    [pair.targetLang, pair.nativeLang, userTypesNative],
+    [pair.targetLang, pair.nativeLang],
   );
 
-  // Auto-translate native -> target (user types native)
+  // Auto-translate native -> target (user types in native field)
   const handleNativeChange = useCallback(
     (val: string) => {
       setNative(val);
       nativeIsUserTyped.current = true;
       if (nativeTimerRef.current) clearTimeout(nativeTimerRef.current);
-      // Only auto-translate if user typed this AND the user's flow goes this direction
-      if (userTypesNative && val.trim()) {
+      if (!targetIsUserTyped.current) {
+        targetIsUserTyped.current = true;
+      }
+      if (val.trim()) {
         setTranslatingField("target");
         nativeTimerRef.current = setTimeout(() => {
           autoTranslate(val, pair.nativeLang, pair.targetLang).then((result) => {
@@ -733,11 +737,11 @@ function AddForm({
             setTranslatingField(null);
           });
         }, 500);
-      } else if (!val.trim()) {
+      } else {
         setTranslatingField(null);
       }
     },
-    [pair.nativeLang, pair.targetLang, userTypesNative],
+    [pair.nativeLang, pair.targetLang],
   );
 
   // Clean up timers on unmount
@@ -909,7 +913,13 @@ function PhraseRow({
         />
       ) : (
         <>
-          <p style={{ fontSize: "1.05rem", fontWeight: 600, lineHeight: 1.45 }}>{phrase.target}</p>
+          <p
+            style={{ fontSize: "1.05rem", fontWeight: 600, lineHeight: 1.45, cursor: "pointer" }}
+            onClick={() => speak(phrase.target, phrase.targetLang)}
+            title="Tap to hear pronunciation"
+          >
+            {phrase.target} <span style={{ fontSize: "0.75rem", opacity: 0.5 }}>🔊</span>
+          </p>
           {phrase.pronunciation && (
             <p style={{ color: "var(--muted)", fontSize: "0.85rem", fontStyle: "italic" }}>
               {phrase.pronunciation}
@@ -1097,7 +1107,13 @@ function PracticeView({
           textAlign: "center",
         }}
       >
-        <p style={{ fontSize: "1.6rem", fontWeight: 700, lineHeight: 1.3 }}>{p.target}</p>
+        <p
+          style={{ fontSize: "1.6rem", fontWeight: 700, lineHeight: 1.3, cursor: "pointer" }}
+          onClick={() => speak(p.target, p.targetLang)}
+          title="Tap to hear pronunciation"
+        >
+          {p.target} <span style={{ fontSize: "0.9rem", opacity: 0.5 }}>🔊</span>
+        </p>
         {p.pronunciation && <p style={{ color: "var(--muted)", fontStyle: "italic" }}>{p.pronunciation}</p>}
         <p style={{ color: "var(--muted)" }}>{p.native}</p>
         {p.topic && (
@@ -1273,7 +1289,12 @@ function FullscreenView({
             fontWeight: 700,
             lineHeight: 1.2,
             wordBreak: "break-word",
+            cursor: "pointer",
+            position: "relative",
+            zIndex: 10,
           }}
+          onClick={(e) => { e.stopPropagation(); speak(p.target, p.targetLang); }}
+          title="Tap to hear pronunciation"
         >
           {p.target}
         </p>
