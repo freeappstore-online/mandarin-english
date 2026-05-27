@@ -68,7 +68,6 @@ const LANG_CODES: Record<string, string> = {
   Indonesian: "id",
 };
 
-// Auto-translate via MyMemory (free, no API key required)
 async function autoTranslate(
   text: string,
   sourceLang: string,
@@ -78,6 +77,24 @@ async function autoTranslate(
   const targetCode = LANG_CODES[targetLang];
   if (!sourceCode || !targetCode) return null;
   if (!text.trim()) return null;
+
+  // Try Google Translate free endpoint first (best quality, especially CJK)
+  try {
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sourceCode}&tl=${targetCode}&dt=t&q=${encodeURIComponent(text)}`;
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.json() as unknown[][];
+      const segments = data?.[0] as unknown[][];
+      if (Array.isArray(segments)) {
+        const translated = segments.map((s) => (s as string[])[0]).join("");
+        if (translated) return translated;
+      }
+    }
+  } catch {
+    // fall through to MyMemory
+  }
+
+  // Fallback: MyMemory (lower quality but reliable)
   try {
     const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${sourceCode}|${targetCode}`;
     const res = await fetch(url);
