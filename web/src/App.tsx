@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Shell } from "./components/Shell";
 
 // Multilingual phrase prep for face-to-face language exchange. Pick a
@@ -24,6 +24,7 @@ interface Pair {
 
 const STORAGE_KEY = "mandarin-english:phrases:v2";
 const PAIR_KEY = "mandarin-english:pair";
+const NATIVE_LANG_KEY = "mandarin-english:native-lang";
 const LEGACY_KEY = "mandarin-english:phrases";       // pre-multilingual
 const LEGACY_DIRECTION_KEY = "mandarin-english:direction";
 
@@ -47,6 +48,57 @@ const COMMON_LANGUAGES = [
   "Vietnamese",
   "Indonesian",
 ];
+
+// ISO 639-1 codes for MyMemory translation API
+const LANG_CODES: Record<string, string> = {
+  Mandarin: "zh",
+  English: "en",
+  Spanish: "es",
+  French: "fr",
+  German: "de",
+  Italian: "it",
+  Portuguese: "pt",
+  Japanese: "ja",
+  Korean: "ko",
+  Cantonese: "zh",
+  Russian: "ru",
+  Arabic: "ar",
+  Hindi: "hi",
+  Vietnamese: "vi",
+  Indonesian: "id",
+};
+
+// Auto-translate via MyMemory (free, no API key required)
+async function autoTranslate(
+  text: string,
+  sourceLang: string,
+  targetLang: string,
+): Promise<string | null> {
+  const sourceCode = LANG_CODES[sourceLang];
+  const targetCode = LANG_CODES[targetLang];
+  if (!sourceCode || !targetCode) return null;
+  if (!text.trim()) return null;
+  try {
+    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${sourceCode}|${targetCode}`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json() as { responseStatus: number; responseData?: { translatedText?: string } };
+    if (data.responseStatus !== 200) return null;
+    return data.responseData?.translatedText ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function loadNativeLang(): string {
+  try {
+    const raw = localStorage.getItem(NATIVE_LANG_KEY);
+    if (raw) return raw;
+  } catch {
+    // fall through
+  }
+  return "English";
+}
 
 const SEED_PHRASES: Phrase[] = [
   {
@@ -157,6 +209,7 @@ type View = "list" | "practice";
 export default function App() {
   const [phrases, setPhrases] = useState<Phrase[]>(() => loadPhrases());
   const [pair, setPair] = useState<Pair>(() => loadPair());
+  const [nativeLang, setNativeLang] = useState<string>(() => loadNativeLang());
   const [view, setView] = useState<View>("list");
   const [topicFilter, setTopicFilter] = useState<string>("");
   const [showOnlyUnpractised, setShowOnlyUnpractised] = useState(false);
@@ -168,6 +221,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(PAIR_KEY, JSON.stringify(pair));
   }, [pair]);
+
+  useEffect(() => {
+    localStorage.setItem(NATIVE_LANG_KEY, nativeLang);
+  }, [nativeLang]);
 
   // All distinct language pairs the user has phrases for — drives the
   // pair quick-switcher so they can flip between the two pairs they're
@@ -232,13 +289,20 @@ export default function App() {
       <div style={{ maxWidth: "780px", margin: "0 auto", padding: "1rem 0 4rem" }}>
         <Header />
 
-        <PairPicker pair={pair} onChange={setPair} knownPairs={knownPairs} />
+        <PairPicker
+          pair={pair}
+          onChange={setPair}
+          knownPairs={knownPairs}
+          nativeLang={nativeLang}
+          onNativeLangChange={setNativeLang}
+        />
 
         <ViewTabs view={view} onChange={setView} />
 
         {view === "list" ? (
           <ListView
             pair={pair}
+            nativeLang={nativeLang}
             phrases={filtered}
             topics={topics}
             topicFilter={topicFilter}
@@ -286,12 +350,17 @@ function PairPicker({
   pair,
   onChange,
   knownPairs,
+  nativeLang,
+  onNativeLangChange,
 }: {
   pair: Pair;
   onChange: (p: Pair) => void;
   knownPairs: Pair[];
+  nativeLang: string;
+  onNativeLangChange: (lang: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [draftNative, setDraftNative] = useState(pair.nativeLang);
   const [draftTarget, setDraftTarget] = useState(pair.targetLang);
 
@@ -354,65 +423,135 @@ function PairPicker({
   }
 
   return (
-    <div
-      style={{
-        display: "flex",
-        gap: "0.5rem",
-        padding: "0.4rem",
-        background: "var(--panel)",
-        border: "1px solid var(--line)",
-        borderRadius: "0.75rem",
-        marginBottom: "1rem",
-        alignItems: "center",
-        flexWrap: "wrap",
-      }}
-    >
-      {knownPairs.map((p) => {
-        const k = `${p.nativeLang}→${p.targetLang}`;
-        const active = p.nativeLang === pair.nativeLang && p.targetLang === pair.targetLang;
-        return (
-          <button
-            key={k}
-            type="button"
-            onClick={() => onChange(p)}
-            style={{
-              padding: "0.45rem 0.9rem",
-              borderRadius: "0.5rem",
-              border: 0,
-              fontFamily: "inherit",
-              fontWeight: 600,
-              fontSize: "0.88rem",
-              cursor: "pointer",
-              background: active ? "var(--accent)" : "transparent",
-              color: active ? "white" : "var(--ink)",
-            }}
-          >
-            {p.nativeLang} → {p.targetLang}
-          </button>
-        );
-      })}
-      <button
-        type="button"
-        onClick={() => {
-          setDraftNative(pair.nativeLang);
-          setDraftTarget(pair.targetLang);
-          setEditing(true);
-        }}
+    <div style={{ marginBottom: "1rem" }}>
+      <div
         style={{
-          marginLeft: "auto",
-          padding: "0.45rem 0.9rem",
-          borderRadius: "0.5rem",
-          border: "1px dashed var(--line)",
-          fontFamily: "inherit",
-          fontWeight: 600,
-          fontSize: "0.85rem",
-          cursor: "pointer",
-          background: "transparent",
-          color: "var(--muted)",
+          display: "flex",
+          gap: "0.5rem",
+          padding: "0.4rem",
+          background: "var(--panel)",
+          border: "1px solid var(--line)",
+          borderRadius: "0.75rem",
+          alignItems: "center",
+          flexWrap: "wrap",
         }}
       >
-        + Pair
-      </button>
+        {knownPairs.map((p) => {
+          const k = `${p.nativeLang}→${p.targetLang}`;
+          const active = p.nativeLang === pair.nativeLang && p.targetLang === pair.targetLang;
+          return (
+            <button
+              key={k}
+              type="button"
+              onClick={() => onChange(p)}
+              style={{
+                padding: "0.45rem 0.9rem",
+                borderRadius: "0.5rem",
+                border: 0,
+                fontFamily: "inherit",
+                fontWeight: 600,
+                fontSize: "0.88rem",
+                cursor: "pointer",
+                background: active ? "var(--accent)" : "transparent",
+                color: active ? "white" : "var(--ink)",
+              }}
+            >
+              {p.nativeLang} → {p.targetLang}
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          onClick={() => {
+            setDraftNative(pair.nativeLang);
+            setDraftTarget(pair.targetLang);
+            setEditing(true);
+          }}
+          style={{
+            padding: "0.45rem 0.9rem",
+            borderRadius: "0.5rem",
+            border: "1px dashed var(--line)",
+            fontFamily: "inherit",
+            fontWeight: 600,
+            fontSize: "0.85rem",
+            cursor: "pointer",
+            background: "transparent",
+            color: "var(--muted)",
+          }}
+        >
+          + Pair
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowSettings((v) => !v)}
+          style={{
+            marginLeft: "auto",
+            padding: "0.45rem 0.9rem",
+            borderRadius: "0.5rem",
+            border: 0,
+            fontFamily: "inherit",
+            fontWeight: 600,
+            fontSize: "0.85rem",
+            cursor: "pointer",
+            background: "transparent",
+            color: "var(--muted)",
+          }}
+          title="Settings"
+        >
+          Settings
+        </button>
+      </div>
+
+      {showSettings && (
+        <div
+          style={{
+            marginTop: "0.5rem",
+            padding: "0.75rem 1rem",
+            background: "var(--panel)",
+            border: "1px solid var(--line)",
+            borderRadius: "0.75rem",
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+            flexWrap: "wrap",
+          }}
+        >
+          <label
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.4rem",
+              fontSize: "0.88rem",
+              fontWeight: 600,
+              color: "var(--muted)",
+            }}
+          >
+            My native language:
+            <select
+              value={nativeLang}
+              onChange={(e) => onNativeLangChange(e.target.value)}
+              style={{
+                padding: "0.4rem 0.6rem",
+                border: "1px solid var(--line)",
+                borderRadius: "0.5rem",
+                background: "var(--paper)",
+                color: "var(--ink)",
+                fontFamily: "inherit",
+                fontSize: "0.88rem",
+              }}
+            >
+              {COMMON_LANGUAGES.map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span style={{ fontSize: "0.78rem", color: "var(--muted)" }}>
+            Used for auto-translation when adding phrases
+          </span>
+        </div>
+      )}
     </div>
   );
 }
@@ -457,6 +596,7 @@ function ViewTabs({ view, onChange }: { view: View; onChange: (v: View) => void 
 
 function ListView(props: {
   pair: Pair;
+  nativeLang: string;
   phrases: Phrase[];
   topics: string[];
   topicFilter: string;
@@ -469,7 +609,7 @@ function ListView(props: {
 }) {
   return (
     <>
-      <AddForm pair={props.pair} onAdd={props.onAdd} />
+      <AddForm pair={props.pair} nativeLang={props.nativeLang} onAdd={props.onAdd} />
 
       {(props.topics.length > 0 || props.showOnlyUnpractised) && (
         <div style={{ display: "flex", gap: "0.75rem", flexWrap: "wrap", margin: "1rem 0 0.75rem" }}>
@@ -521,72 +661,175 @@ function ListView(props: {
 
 function AddForm({
   pair,
+  nativeLang,
   onAdd,
 }: {
   pair: Pair;
+  nativeLang: string;
   onAdd: (p: Omit<Phrase, "id" | "practiced" | "createdAt">) => void;
 }) {
   const [target, setTarget] = useState("");
   const [native, setNative] = useState("");
   const [pronunciation, setPronunciation] = useState("");
   const [topic, setTopic] = useState("");
+  const [justAdded, setJustAdded] = useState(false);
+  const [translatingField, setTranslatingField] = useState<"target" | "native" | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const targetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const nativeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Track whether a field value was set by the user (true) or auto-fill (false).
+  // This prevents translate loops: typing in target auto-fills native, which
+  // should NOT trigger a reverse translation back into target.
+  const targetIsUserTyped = useRef(true);
+  const nativeIsUserTyped = useRef(true);
 
-  function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!target.trim() || !native.trim()) return;
-    onAdd({
-      nativeLang: pair.nativeLang,
-      targetLang: pair.targetLang,
-      target: target.trim(),
-      native: native.trim(),
-      pronunciation: pronunciation.trim(),
-      topic: topic.trim(),
-    });
-    setTarget("");
-    setNative("");
-    setPronunciation("");
-    // keep topic — usually you batch-add to one topic at a time
-  }
+  // Determine which field is "what the user types natively" vs "what needs
+  // translating". If the pair's nativeLang matches the user's global native
+  // language, the user types in the "native" field and auto-translates to
+  // "target". Otherwise, the user types in the "target" field and we
+  // auto-translate to "native".
+  const userTypesNative = pair.nativeLang === nativeLang;
+
+  // Auto-translate target -> native (user types target)
+  const handleTargetChange = useCallback(
+    (val: string) => {
+      setTarget(val);
+      targetIsUserTyped.current = true;
+      if (targetTimerRef.current) clearTimeout(targetTimerRef.current);
+      // Only auto-translate if user typed this AND the user's flow goes this direction
+      if (!userTypesNative && val.trim()) {
+        setTranslatingField("native");
+        targetTimerRef.current = setTimeout(() => {
+          autoTranslate(val, pair.targetLang, pair.nativeLang).then((result) => {
+            if (result) {
+              nativeIsUserTyped.current = false;
+              setNative(result);
+            }
+            setTranslatingField(null);
+          });
+        }, 500);
+      } else if (!val.trim()) {
+        setTranslatingField(null);
+      }
+    },
+    [pair.targetLang, pair.nativeLang, userTypesNative],
+  );
+
+  // Auto-translate native -> target (user types native)
+  const handleNativeChange = useCallback(
+    (val: string) => {
+      setNative(val);
+      nativeIsUserTyped.current = true;
+      if (nativeTimerRef.current) clearTimeout(nativeTimerRef.current);
+      // Only auto-translate if user typed this AND the user's flow goes this direction
+      if (userTypesNative && val.trim()) {
+        setTranslatingField("target");
+        nativeTimerRef.current = setTimeout(() => {
+          autoTranslate(val, pair.nativeLang, pair.targetLang).then((result) => {
+            if (result) {
+              targetIsUserTyped.current = false;
+              setTarget(result);
+            }
+            setTranslatingField(null);
+          });
+        }, 500);
+      } else if (!val.trim()) {
+        setTranslatingField(null);
+      }
+    },
+    [pair.nativeLang, pair.targetLang, userTypesNative],
+  );
+
+  // Clean up timers on unmount
+  useEffect(() => {
+    return () => {
+      if (targetTimerRef.current) clearTimeout(targetTimerRef.current);
+      if (nativeTimerRef.current) clearTimeout(nativeTimerRef.current);
+    };
+  }, []);
+
+  const submit = useCallback(
+    (e: React.FormEvent) => {
+      e.preventDefault();
+      const trimmedTarget = target.trim();
+      const trimmedNative = native.trim();
+      if (!trimmedTarget || !trimmedNative) return;
+      onAdd({
+        nativeLang: pair.nativeLang,
+        targetLang: pair.targetLang,
+        target: trimmedTarget,
+        native: trimmedNative,
+        pronunciation: pronunciation.trim(),
+        topic: topic.trim(),
+      });
+      setTarget("");
+      setNative("");
+      setPronunciation("");
+      targetIsUserTyped.current = true;
+      nativeIsUserTyped.current = true;
+      // keep topic — usually you batch-add to one topic at a time
+
+      // Brief success flash
+      setJustAdded(true);
+      setTimeout(() => setJustAdded(false), 1500);
+
+      // Scroll phrase list into view so the user sees the new entry
+      requestAnimationFrame(() => {
+        listRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
+    },
+    [target, native, pronunciation, topic, pair, onAdd],
+  );
 
   return (
-    <form
-      onSubmit={submit}
-      style={{
-        padding: "1rem",
-        border: "1px solid var(--line)",
-        borderRadius: "0.75rem",
-        background: "var(--panel)",
-        display: "grid",
-        gap: "0.6rem",
-      }}
-    >
-      <Field
-        label={`${pair.targetLang} (what you'll say)`}
-        value={target}
-        onChange={setTarget}
-      />
-      <Field
-        label={`${pair.nativeLang} meaning`}
-        value={native}
-        onChange={setNative}
-      />
-      <Field
-        label="Pronunciation (optional — pinyin, romaji, IPA, etc.)"
-        value={pronunciation}
-        onChange={setPronunciation}
-      />
-      <Field
-        label="Topic (optional)"
-        value={topic}
-        onChange={setTopic}
-        placeholder="intro, weather, food…"
-      />
-      <div>
-        <button type="submit" style={primaryButton} disabled={!target.trim() || !native.trim()}>
-          Add phrase
-        </button>
-      </div>
-    </form>
+    <>
+      <form
+        onSubmit={submit}
+        style={{
+          padding: "1rem",
+          border: "1px solid var(--line)",
+          borderRadius: "0.75rem",
+          background: "var(--panel)",
+          display: "grid",
+          gap: "0.6rem",
+        }}
+      >
+        <Field
+          label={`${pair.targetLang} (what you'll say)`}
+          value={target}
+          onChange={handleTargetChange}
+          trailing={translatingField === "target" ? "translating..." : undefined}
+        />
+        <Field
+          label={`${pair.nativeLang} meaning`}
+          value={native}
+          onChange={handleNativeChange}
+          trailing={translatingField === "native" ? "translating..." : undefined}
+        />
+        <Field
+          label="Pronunciation (optional — pinyin, romaji, IPA, etc.)"
+          value={pronunciation}
+          onChange={setPronunciation}
+        />
+        <Field
+          label="Topic (optional)"
+          value={topic}
+          onChange={setTopic}
+          placeholder="intro, weather, food..."
+        />
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+          <button type="submit" style={primaryButton} disabled={!target.trim() || !native.trim()}>
+            Add phrase
+          </button>
+          {justAdded && (
+            <span style={{ fontSize: "0.85rem", color: "var(--accent)", fontWeight: 600 }}>
+              Added!
+            </span>
+          )}
+        </div>
+      </form>
+      <div ref={listRef} />
+    </>
   );
 }
 
@@ -596,16 +839,25 @@ function Field({
   onChange,
   placeholder,
   datalist,
+  trailing,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   datalist?: string;
+  trailing?: string;
 }) {
   return (
     <label style={{ display: "grid", gap: "0.25rem" }}>
-      <span style={{ fontSize: "0.78rem", color: "var(--muted)", fontWeight: 600 }}>{label}</span>
+      <span style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ fontSize: "0.78rem", color: "var(--muted)", fontWeight: 600 }}>{label}</span>
+        {trailing && (
+          <span style={{ fontSize: "0.72rem", color: "var(--muted)", fontStyle: "italic" }}>
+            {trailing}
+          </span>
+        )}
+      </span>
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
