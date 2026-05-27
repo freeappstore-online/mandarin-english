@@ -167,6 +167,21 @@ function speak(text: string, lang: string, rate?: number) {
   window.speechSynthesis.speak(u);
 }
 
+function useSwipe(onLeft: () => void, onRight: () => void, threshold = 50) {
+  const startX = useRef(0);
+  const startY = useRef(0);
+  return useMemo(() => ({
+    onTouchStart: (e: React.TouchEvent) => { startX.current = e.touches[0]!.clientX; startY.current = e.touches[0]!.clientY; },
+    onTouchEnd: (e: React.TouchEvent) => {
+      const dx = e.changedTouches[0]!.clientX - startX.current;
+      const dy = e.changedTouches[0]!.clientY - startY.current;
+      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > threshold) {
+        if (dx < 0) onLeft(); else onRight();
+      }
+    },
+  }), [onLeft, onRight, threshold]);
+}
+
 type Tab = "phrases" | "practice" | "settings";
 
 function loadTab(): Tab {
@@ -517,6 +532,7 @@ function PhrasesTab(props: {
 // ---------------------------------------------------------------------------
 
 function AddForm({ pair, onAdd }: { pair: Pair; onAdd: (p: Omit<Phrase, "id" | "practiced" | "createdAt">) => void }) {
+  const [open, setOpen] = useState(false);
   const [target, setTarget] = useState("");
   const [native, setNative] = useState("");
   const [pronunciation, setPronunciation] = useState("");
@@ -622,6 +638,34 @@ function AddForm({ pair, onAdd }: { pair: Pair; onAdd: (p: Omit<Phrase, "id" | "
     requestAnimationFrame(() => { listRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }); });
   }, [target, native, pronunciation, topic, pair, onAdd]);
 
+  if (!open) {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          style={{
+            width: "100%",
+            padding: "0.7rem",
+            border: "1px dashed var(--line)",
+            borderRadius: "0.75rem",
+            background: "var(--panel)",
+            color: "var(--muted)",
+            fontFamily: "inherit",
+            fontWeight: 600,
+            fontSize: "0.88rem",
+            cursor: "pointer",
+          }}
+        >
+          + Add phrase
+        </button>
+        {justAdded && (
+          <span style={{ display: "block", textAlign: "center", fontSize: "0.82rem", color: "var(--accent)", fontWeight: 600, marginTop: "0.4rem" }}>Added!</span>
+        )}
+      </>
+    );
+  }
+
   return (
     <>
       <form
@@ -640,6 +684,7 @@ function AddForm({ pair, onAdd }: { pair: Pair; onAdd: (p: Omit<Phrase, "id" | "
           value={target}
           onChange={handleTargetChange}
           trailing={translatingField === "target" ? "translating..." : undefined}
+          autoFocus
         />
         <Field
           label={`${pair.nativeLang} meaning`}
@@ -656,6 +701,9 @@ function AddForm({ pair, onAdd }: { pair: Pair; onAdd: (p: Omit<Phrase, "id" | "
             disabled={!target.trim() || !native.trim()}
           >
             Add phrase
+          </button>
+          <button type="button" onClick={() => setOpen(false)} style={secondaryButton}>
+            Close
           </button>
           {justAdded && <span style={{ fontSize: "0.82rem", color: "var(--accent)", fontWeight: 600 }}>Added!</span>}
         </div>
@@ -751,6 +799,10 @@ function PracticeTab({ phrases, onMarkPractised, onResetAll }: { phrases: Phrase
     setIndex((i) => (phrases.length > 0 ? Math.min(i, phrases.length - 1) : 0));
   }, [phrases.length]);
 
+  const next = useCallback(() => { setIndex((i) => (i + 1) % phrases.length); }, [phrases.length]);
+  const prev = useCallback(() => { setIndex((i) => (i - 1 + phrases.length) % phrases.length); }, [phrases.length]);
+  const swipe = useSwipe(next, prev);
+
   if (phrases.length === 0) {
     return (
       <div style={{ color: "var(--muted)", padding: "3rem 1rem", textAlign: "center" }}>
@@ -764,8 +816,6 @@ function PracticeTab({ phrases, onMarkPractised, onResetAll }: { phrases: Phrase
   const p = phrases[safeIndex]!;
   const allPractised = phrases.every((q) => q.practiced);
 
-  function next() { setIndex((i) => (i + 1) % phrases.length); }
-  function prev() { setIndex((i) => (i - 1 + phrases.length) % phrases.length); }
   function gotIt() { onMarkPractised(p.id); if (safeIndex < phrases.length - 1) next(); }
 
   return (
@@ -788,6 +838,7 @@ function PracticeTab({ phrases, onMarkPractised, onResetAll }: { phrases: Phrase
       </div>
 
       <div
+        {...swipe}
         style={{
           padding: "2rem 1.25rem",
           border: "1px solid var(--line)",
@@ -798,6 +849,7 @@ function PracticeTab({ phrases, onMarkPractised, onResetAll }: { phrases: Phrase
           gap: "0.5rem",
           alignContent: "center",
           textAlign: "center",
+          touchAction: "pan-y",
         }}
       >
         <p
@@ -829,7 +881,7 @@ function PracticeTab({ phrases, onMarkPractised, onResetAll }: { phrases: Phrase
       )}
 
       {fullscreen && (
-        <FullscreenView phrases={phrases} index={safeIndex} onPrev={prev} onNext={next} onClose={() => setFullscreen(false)} />
+        <FullscreenView phrases={phrases} index={safeIndex} onPrev={prev} onNext={next} onGotIt={gotIt} onClose={() => setFullscreen(false)} />
       )}
     </div>
   );
@@ -1020,10 +1072,11 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 // Fullscreen practice view
 // ---------------------------------------------------------------------------
 
-function FullscreenView({ phrases, index, onPrev, onNext, onClose }: {
-  phrases: Phrase[]; index: number; onPrev: () => void; onNext: () => void; onClose: () => void;
+function FullscreenView({ phrases, index, onPrev, onNext, onGotIt, onClose }: {
+  phrases: Phrase[]; index: number; onPrev: () => void; onNext: () => void; onGotIt: () => void; onClose: () => void;
 }) {
   const p = phrases[index]!;
+  const swipe = useSwipe(onNext, onPrev);
 
   useEffect(() => {
     return () => { if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen().catch(() => {}); };
@@ -1040,10 +1093,11 @@ function FullscreenView({ phrases, index, onPrev, onNext, onClose }: {
       if (e.key === "Escape") onClose();
       else if (e.key === "ArrowLeft") onPrev();
       else if (e.key === "ArrowRight") onNext();
+      else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onGotIt(); }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, onPrev, onNext]);
+  }, [onClose, onPrev, onNext, onGotIt]);
 
   return (
     <div
@@ -1055,17 +1109,29 @@ function FullscreenView({ phrases, index, onPrev, onNext, onClose }: {
         <span style={{ color: "var(--muted)", fontSize: "0.85rem" }}>
           {index + 1} / {phrases.length}{p.topic && <> · {p.topic}</>}
         </span>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Exit fullscreen"
-          style={{ background: "transparent", border: "1px solid var(--line)", color: "var(--ink)", padding: "0.4rem 0.7rem", borderRadius: "0.5rem", fontFamily: "inherit", fontSize: "0.85rem", cursor: "pointer" }}
-        >
-          ✕ Close
-        </button>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          <button
+            type="button"
+            onClick={onGotIt}
+            style={{ ...primaryButton, padding: "0.4rem 0.7rem", fontSize: "0.82rem" }}
+          >
+            Got it →
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Exit fullscreen"
+            style={{ background: "transparent", border: "1px solid var(--line)", color: "var(--ink)", padding: "0.4rem 0.7rem", borderRadius: "0.5rem", fontFamily: "inherit", fontSize: "0.85rem", cursor: "pointer" }}
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
-      <div style={{ position: "relative", display: "grid", alignContent: "center", textAlign: "center", padding: "1.5rem", gap: "0.6em", overflow: "auto" }}>
+      <div
+        {...swipe}
+        style={{ position: "relative", display: "grid", alignContent: "center", textAlign: "center", padding: "1.5rem", gap: "0.6em", overflow: "auto", touchAction: "pan-y" }}
+      >
         <p
           style={{ fontSize: "clamp(2.5rem, 14vw, 7rem)", fontWeight: 700, lineHeight: 1.15, wordBreak: "break-word", cursor: "pointer", position: "relative", zIndex: 10, margin: 0 }}
           onClick={(e) => { e.stopPropagation(); speak(p.target, p.targetLang); }}
@@ -1076,13 +1142,11 @@ function FullscreenView({ phrases, index, onPrev, onNext, onClose }: {
           <p style={{ color: "var(--muted)", fontStyle: "italic", fontSize: "clamp(1.2rem, 5vw, 2.5rem)", margin: 0 }}>{p.pronunciation}</p>
         )}
         <p style={{ color: "var(--muted)", fontSize: "clamp(1.1rem, 4.5vw, 2.2rem)", margin: 0 }}>{p.native}</p>
-        <button type="button" aria-label="Previous phrase" onClick={onPrev} style={tapZoneLeft} />
-        <button type="button" aria-label="Next phrase" onClick={onNext} style={tapZoneRight} />
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", padding: "0.75rem 1.25rem", borderTop: "1px solid var(--line)", color: "var(--muted)", fontSize: "0.82rem" }}>
-        <span>← tap left</span>
-        <span>tap right →</span>
+        <span>← swipe / tap</span>
+        <span>swipe / tap →</span>
       </div>
     </div>
   );
@@ -1092,9 +1156,9 @@ function FullscreenView({ phrases, index, onPrev, onNext, onClose }: {
 // Shared components & styles
 // ---------------------------------------------------------------------------
 
-function Field({ label, value, onChange, placeholder, datalist, trailing }: {
+function Field({ label, value, onChange, placeholder, datalist, trailing, autoFocus }: {
   label: string; value: string; onChange: (v: string) => void;
-  placeholder?: string; datalist?: string; trailing?: string;
+  placeholder?: string; datalist?: string; trailing?: string; autoFocus?: boolean;
 }) {
   return (
     <label style={{ display: "grid", gap: "0.2rem" }}>
@@ -1107,6 +1171,7 @@ function Field({ label, value, onChange, placeholder, datalist, trailing }: {
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         list={datalist}
+        autoFocus={autoFocus}
         style={{
           padding: "0.5rem 0.6rem",
           border: "1px solid var(--line)",
@@ -1121,13 +1186,6 @@ function Field({ label, value, onChange, placeholder, datalist, trailing }: {
     </label>
   );
 }
-
-const tapZoneLeft: React.CSSProperties = {
-  position: "absolute", top: 0, left: 0, width: "50%", height: "100%",
-  background: "transparent", border: 0, cursor: "pointer", outline: "none",
-};
-
-const tapZoneRight: React.CSSProperties = { ...tapZoneLeft, left: "50%" };
 
 const primaryButton: React.CSSProperties = {
   background: "var(--accent)", color: "white", border: 0,
