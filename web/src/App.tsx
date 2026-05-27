@@ -25,6 +25,7 @@ interface Pair {
 const STORAGE_KEY = "mandarin-english:phrases:v2";
 const PAIR_KEY = "mandarin-english:pair";
 const NATIVE_LANG_KEY = "mandarin-english:native-lang";
+const SPEECH_RATE_KEY = "mandarin-english:speech-rate";
 const LEGACY_KEY = "mandarin-english:phrases";       // pre-multilingual
 const LEGACY_DIRECTION_KEY = "mandarin-english:direction";
 
@@ -67,6 +68,32 @@ const LANG_CODES: Record<string, string> = {
   Vietnamese: "vi",
   Indonesian: "id",
 };
+
+const CJK_LANGS = new Set(["zh", "ja", "ko", "ar", "hi", "ru"]);
+
+async function fetchPronunciation(
+  text: string,
+  lang: string,
+): Promise<string | null> {
+  const code = LANG_CODES[lang];
+  if (!code || !CJK_LANGS.has(code)) return null;
+  try {
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${code}&tl=en&dt=rm&q=${encodeURIComponent(text)}`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = await res.json() as unknown[][];
+    const rmBlock = data?.[0] as unknown[][] | undefined;
+    if (!Array.isArray(rmBlock)) return null;
+    const parts: string[] = [];
+    for (const seg of rmBlock) {
+      const rom = (seg as string[])[3];
+      if (typeof rom === "string" && rom.trim()) parts.push(rom.trim());
+    }
+    return parts.length > 0 ? parts.join(" ") : null;
+  } catch {
+    return null;
+  }
+}
 
 async function autoTranslate(
   text: string,
@@ -111,10 +138,16 @@ function loadNativeLang(): string {
   try {
     const raw = localStorage.getItem(NATIVE_LANG_KEY);
     if (raw) return raw;
-  } catch {
-    // fall through
-  }
+  } catch {}
   return "English";
+}
+
+function loadSpeechRate(): number {
+  try {
+    const raw = localStorage.getItem(SPEECH_RATE_KEY);
+    if (raw) { const n = parseFloat(raw); if (n >= 0.3 && n <= 2) return n; }
+  } catch {}
+  return 0.85;
 }
 
 const SEED_PHRASES: Phrase[] = [
@@ -221,13 +254,13 @@ function newId(): string {
   return `p-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
-function speak(text: string, lang: string) {
+function speak(text: string, lang: string, rate?: number) {
   if (!window.speechSynthesis) return;
   window.speechSynthesis.cancel();
   const u = new SpeechSynthesisUtterance(text);
   const code = LANG_CODES[lang];
   if (code) u.lang = code;
-  u.rate = 0.85;
+  u.rate = rate ?? loadSpeechRate();
   window.speechSynthesis.speak(u);
 }
 
@@ -237,6 +270,7 @@ export default function App() {
   const [phrases, setPhrases] = useState<Phrase[]>(() => loadPhrases());
   const [pair, setPair] = useState<Pair>(() => loadPair());
   const [nativeLang, setNativeLang] = useState<string>(() => loadNativeLang());
+  const [speechRate, setSpeechRate] = useState<number>(() => loadSpeechRate());
   const [view, setView] = useState<View>("list");
   const [topicFilter, setTopicFilter] = useState<string>("");
   const [showOnlyUnpractised, setShowOnlyUnpractised] = useState(false);
@@ -252,6 +286,10 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(NATIVE_LANG_KEY, nativeLang);
   }, [nativeLang]);
+
+  useEffect(() => {
+    localStorage.setItem(SPEECH_RATE_KEY, String(speechRate));
+  }, [speechRate]);
 
   // All distinct language pairs the user has phrases for — drives the
   // pair quick-switcher so they can flip between the two pairs they're
@@ -322,6 +360,8 @@ export default function App() {
           knownPairs={knownPairs}
           nativeLang={nativeLang}
           onNativeLangChange={setNativeLang}
+          speechRate={speechRate}
+          onSpeechRateChange={setSpeechRate}
         />
 
         <ViewTabs view={view} onChange={setView} />
@@ -446,12 +486,16 @@ function PairPicker({
   knownPairs,
   nativeLang,
   onNativeLangChange,
+  speechRate,
+  onSpeechRateChange,
 }: {
   pair: Pair;
   onChange: (p: Pair) => void;
   knownPairs: Pair[];
   nativeLang: string;
   onNativeLangChange: (lang: string) => void;
+  speechRate: number;
+  onSpeechRateChange: (rate: number) => void;
 }) {
   const [editing, setEditing] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -521,13 +565,14 @@ function PairPicker({
       <div
         style={{
           display: "flex",
-          gap: "0.5rem",
+          gap: "0.4rem",
           padding: "0.4rem",
           background: "var(--panel)",
           border: "1px solid var(--line)",
           borderRadius: "0.75rem",
           alignItems: "center",
           flexWrap: "wrap",
+          overflow: "auto",
         }}
       >
         {knownPairs.map((p) => {
@@ -580,19 +625,20 @@ function PairPicker({
           onClick={() => setShowSettings((v) => !v)}
           style={{
             marginLeft: "auto",
-            padding: "0.45rem 0.9rem",
+            padding: "0.45rem",
             borderRadius: "0.5rem",
             border: 0,
             fontFamily: "inherit",
-            fontWeight: 600,
-            fontSize: "0.85rem",
+            fontSize: "1.1rem",
             cursor: "pointer",
-            background: "transparent",
-            color: "var(--muted)",
+            background: showSettings ? "var(--accent)" : "transparent",
+            color: showSettings ? "white" : "var(--muted)",
+            lineHeight: 1,
           }}
           title="Settings"
+          aria-label="Settings"
         >
-          Settings
+          ⚙
         </button>
       </div>
 
@@ -600,50 +646,53 @@ function PairPicker({
         <div
           style={{
             marginTop: "0.5rem",
-            padding: "0.75rem 1rem",
+            padding: "1rem",
             background: "var(--panel)",
             border: "1px solid var(--line)",
             borderRadius: "0.75rem",
-            display: "flex",
-            alignItems: "center",
-            gap: "0.75rem",
-            flexWrap: "wrap",
+            display: "grid",
+            gap: "0.85rem",
           }}
         >
-          <label
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.4rem",
-              fontSize: "0.88rem",
-              fontWeight: 600,
-              color: "var(--muted)",
-            }}
-          >
-            My native language:
+          <label style={{ display: "grid", gap: "0.3rem" }}>
+            <span style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--muted)" }}>Native language</span>
             <select
               value={nativeLang}
               onChange={(e) => onNativeLangChange(e.target.value)}
               style={{
-                padding: "0.4rem 0.6rem",
+                padding: "0.5rem 0.6rem",
                 border: "1px solid var(--line)",
                 borderRadius: "0.5rem",
                 background: "var(--paper)",
                 color: "var(--ink)",
                 fontFamily: "inherit",
-                fontSize: "0.88rem",
+                fontSize: "0.9rem",
+                width: "100%",
               }}
             >
               {COMMON_LANGUAGES.map((l) => (
-                <option key={l} value={l}>
-                  {l}
-                </option>
+                <option key={l} value={l}>{l}</option>
               ))}
             </select>
           </label>
-          <span style={{ fontSize: "0.78rem", color: "var(--muted)" }}>
-            Used for auto-translation when adding phrases
-          </span>
+          <label style={{ display: "grid", gap: "0.3rem" }}>
+            <span style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--muted)" }}>
+              Speech speed: {speechRate.toFixed(2)}x
+            </span>
+            <input
+              type="range"
+              min="0.3"
+              max="1.5"
+              step="0.05"
+              value={speechRate}
+              onChange={(e) => onSpeechRateChange(parseFloat(e.target.value))}
+              style={{ width: "100%", accentColor: "var(--accent)" }}
+            />
+            <span style={{ display: "flex", justifyContent: "space-between", fontSize: "0.7rem", color: "var(--muted)" }}>
+              <span>Slow</span>
+              <span>Fast</span>
+            </span>
+          </label>
         </div>
       )}
     </div>
@@ -789,10 +838,14 @@ function AddForm({
         setTranslatingField(null);
         return;
       }
-      if (!nativeIsUserTyped.current || !nativeRef.current.trim()) {
-        setTranslatingField("native");
-        const version = ++translateVersion.current;
-        targetTimerRef.current = setTimeout(() => {
+      const version = ++translateVersion.current;
+      targetTimerRef.current = setTimeout(() => {
+        fetchPronunciation(val, pair.targetLang).then((rom) => {
+          if (version !== translateVersion.current) return;
+          if (rom) setPronunciation(rom);
+        });
+        if (!nativeIsUserTyped.current || !nativeRef.current.trim()) {
+          setTranslatingField("native");
           autoTranslate(val, pair.targetLang, pair.nativeLang).then((result) => {
             if (version !== translateVersion.current) return;
             if (result) {
@@ -801,8 +854,8 @@ function AddForm({
             }
             setTranslatingField(null);
           });
-        }, 500);
-      }
+        }
+      }, 500);
     },
     [pair.targetLang, pair.nativeLang],
   );
@@ -825,6 +878,10 @@ function AddForm({
             if (result) {
               targetIsUserTyped.current = false;
               setTarget(result);
+              fetchPronunciation(result, pair.targetLang).then((rom) => {
+                if (version !== translateVersion.current) return;
+                if (rom) setPronunciation(rom);
+              });
             }
             setTranslatingField(null);
           });
