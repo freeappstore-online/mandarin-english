@@ -1144,9 +1144,9 @@ function FullscreenView({ phrases, index, onPrev, onNext, onGotIt, onClose }: {
         <p style={{ color: "var(--muted)", fontSize: "clamp(1.1rem, 4.5vw, 2.2rem)", margin: 0 }}>{p.native}</p>
       </div>
 
-      <div style={{ display: "flex", justifyContent: "space-between", padding: "0.75rem 1.25rem", borderTop: "1px solid var(--line)", color: "var(--muted)", fontSize: "0.82rem" }}>
-        <span>← swipe / tap</span>
-        <span>swipe / tap →</span>
+      <div style={{ display: "flex", justifyContent: "center", gap: "1.5rem", padding: "0.75rem 1.25rem", borderTop: "1px solid var(--line)", color: "var(--muted)", fontSize: "0.82rem" }}>
+        <span>← swipe →</span>
+        <span>tap text to speak</span>
       </div>
     </div>
   );
