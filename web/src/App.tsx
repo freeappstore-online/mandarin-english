@@ -22,6 +22,7 @@ const STORAGE_KEY = "mandarin-english:phrases:v2";
 const PAIR_KEY = "mandarin-english:pair";
 const NATIVE_LANG_KEY = "mandarin-english:native-lang";
 const SPEECH_RATE_KEY = "mandarin-english:speech-rate";
+const FONT_SCALE_KEY = "mandarin-english:font-scale";
 const TAB_KEY = "mandarin-english:tab";
 const LEGACY_KEY = "mandarin-english:phrases";
 const LEGACY_DIRECTION_KEY = "mandarin-english:direction";
@@ -99,6 +100,14 @@ function loadSpeechRate(): number {
   return 0.85;
 }
 
+function loadFontScale(): number {
+  try {
+    const raw = localStorage.getItem(FONT_SCALE_KEY);
+    if (raw) { const n = parseFloat(raw); if (n >= 0.8 && n <= 1.6) return n; }
+  } catch {}
+  return 1;
+}
+
 const SEED_PHRASES: Phrase[] = [
   { id: "seed-1", nativeLang: "English", targetLang: "Mandarin", target: "你好,我叫…", native: "Hi, my name is…", pronunciation: "nǐ hǎo, wǒ jiào…", topic: "intro", practiced: false, createdAt: Date.now() - 4 },
   { id: "seed-2", nativeLang: "English", targetLang: "Mandarin", target: "我来自悉尼。", native: "I'm from Sydney.", pronunciation: "wǒ lái zì xī ní.", topic: "intro", practiced: false, createdAt: Date.now() - 3 },
@@ -173,6 +182,7 @@ export default function App() {
   const [pair, setPair] = useState<Pair>(() => loadPair());
   const [nativeLang, setNativeLang] = useState<string>(() => loadNativeLang());
   const [speechRate, setSpeechRate] = useState<number>(() => loadSpeechRate());
+  const [fontScale, setFontScale] = useState<number>(() => loadFontScale());
   const [tab, setTab] = useState<Tab>(() => loadTab());
   const [topicFilter, setTopicFilter] = useState<string>("");
   const [showOnlyUnpractised, setShowOnlyUnpractised] = useState(false);
@@ -183,6 +193,8 @@ export default function App() {
   useEffect(() => { localStorage.setItem(PAIR_KEY, JSON.stringify(pair)); }, [pair]);
   useEffect(() => { localStorage.setItem(NATIVE_LANG_KEY, nativeLang); }, [nativeLang]);
   useEffect(() => { localStorage.setItem(SPEECH_RATE_KEY, String(speechRate)); }, [speechRate]);
+  useEffect(() => { localStorage.setItem(FONT_SCALE_KEY, String(fontScale)); }, [fontScale]);
+  useEffect(() => { document.documentElement.style.fontSize = `${16 * fontScale}px`; return () => { document.documentElement.style.fontSize = ""; }; }, [fontScale]);
   useEffect(() => { localStorage.setItem(TAB_KEY, tab); }, [tab]);
 
   const attemptedPronunciation = useRef(new Set<string>());
@@ -285,6 +297,8 @@ export default function App() {
               onNativeLangChange={setNativeLang}
               speechRate={speechRate}
               onSpeechRateChange={setSpeechRate}
+              fontScale={fontScale}
+              onFontScaleChange={setFontScale}
             />
           )}
         </div>
@@ -360,13 +374,13 @@ function BottomNav({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) 
               flexDirection: "column",
               alignItems: "center",
               justifyContent: "center",
-              gap: "0.2rem",
-              padding: "0.6rem 0 0.45rem",
+              gap: "3px",
+              padding: "10px 0 7px",
               border: 0,
               background: "transparent",
               color: active ? "var(--accent)" : "var(--muted)",
               fontFamily: "inherit",
-              fontSize: "0.68rem",
+              fontSize: "11px",
               fontWeight: 600,
               cursor: "pointer",
               transition: "color 0.15s",
@@ -778,13 +792,13 @@ function PracticeTab({ phrases, onMarkPractised, onResetAll }: { phrases: Phrase
         }}
       >
         <p
-          style={{ fontSize: "1.5rem", fontWeight: 700, lineHeight: 1.3, cursor: "pointer", margin: 0 }}
+          style={{ fontSize: "1.75rem", fontWeight: 700, lineHeight: 1.25, cursor: "pointer", margin: 0 }}
           onClick={() => speak(p.target, p.targetLang)}
         >
           {p.target} <span style={{ fontSize: "0.85rem", opacity: 0.45 }}>🔊</span>
         </p>
-        {p.pronunciation && <p style={{ color: "var(--muted)", fontStyle: "italic", margin: 0 }}>{p.pronunciation}</p>}
-        <p style={{ color: "var(--muted)", margin: 0 }}>{p.native}</p>
+        {p.pronunciation && <p style={{ color: "var(--muted)", fontStyle: "italic", fontSize: "1.05rem", margin: 0 }}>{p.pronunciation}</p>}
+        <p style={{ color: "var(--muted)", fontSize: "1.05rem", margin: 0 }}>{p.native}</p>
         {p.topic && (
           <p style={{ color: "var(--muted)", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.08em", margin: 0 }}>
             {p.topic}
@@ -817,11 +831,12 @@ function PracticeTab({ phrases, onMarkPractised, onResetAll }: { phrases: Phrase
 // ---------------------------------------------------------------------------
 
 function SettingsTab({
-  pair, onPairChange, knownPairs, nativeLang, onNativeLangChange, speechRate, onSpeechRateChange,
+  pair, onPairChange, knownPairs, nativeLang, onNativeLangChange, speechRate, onSpeechRateChange, fontScale, onFontScaleChange,
 }: {
   pair: Pair; onPairChange: (p: Pair) => void; knownPairs: Pair[];
   nativeLang: string; onNativeLangChange: (lang: string) => void;
   speechRate: number; onSpeechRateChange: (rate: number) => void;
+  fontScale: number; onFontScaleChange: (s: number) => void;
 }) {
   const [addingPair, setAddingPair] = useState(false);
   const [draftNative, setDraftNative] = useState(pair.nativeLang);
@@ -934,6 +949,23 @@ function SettingsTab({
         </span>
       </Section>
 
+      {/* Font size */}
+      <Section title={`Font size: ${Math.round(fontScale * 100)}%`}>
+        <input
+          type="range"
+          min="0.8"
+          max="1.6"
+          step="0.05"
+          value={fontScale}
+          onChange={(e) => onFontScaleChange(parseFloat(e.target.value))}
+          style={{ width: "100%", accentColor: "var(--accent)" }}
+        />
+        <span style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "var(--muted)" }}>
+          <span>Smaller</span>
+          <span>Larger</span>
+        </span>
+      </Section>
+
       {/* About */}
       <Section title="About">
         <p style={{ color: "var(--muted)", lineHeight: 1.6, fontSize: "0.88rem", margin: 0 }}>
@@ -1024,17 +1056,17 @@ function FullscreenView({ phrases, index, onPrev, onNext, onClose }: {
         </button>
       </div>
 
-      <div style={{ position: "relative", display: "grid", alignContent: "center", textAlign: "center", padding: "1.5rem", gap: "1rem", overflow: "auto" }}>
+      <div style={{ position: "relative", display: "grid", alignContent: "center", textAlign: "center", padding: "1.5rem", gap: "0.6em", overflow: "auto" }}>
         <p
-          style={{ fontSize: "clamp(2rem, 9vw, 5rem)", fontWeight: 700, lineHeight: 1.2, wordBreak: "break-word", cursor: "pointer", position: "relative", zIndex: 10, margin: 0 }}
+          style={{ fontSize: "clamp(2.5rem, 14vw, 7rem)", fontWeight: 700, lineHeight: 1.15, wordBreak: "break-word", cursor: "pointer", position: "relative", zIndex: 10, margin: 0 }}
           onClick={(e) => { e.stopPropagation(); speak(p.target, p.targetLang); }}
         >
           {p.target}
         </p>
         {p.pronunciation && (
-          <p style={{ color: "var(--muted)", fontStyle: "italic", fontSize: "clamp(1rem, 3.5vw, 1.75rem)", margin: 0 }}>{p.pronunciation}</p>
+          <p style={{ color: "var(--muted)", fontStyle: "italic", fontSize: "clamp(1.2rem, 5vw, 2.5rem)", margin: 0 }}>{p.pronunciation}</p>
         )}
-        <p style={{ color: "var(--muted)", fontSize: "clamp(1rem, 3vw, 1.5rem)", margin: 0 }}>{p.native}</p>
+        <p style={{ color: "var(--muted)", fontSize: "clamp(1.1rem, 4.5vw, 2.2rem)", margin: 0 }}>{p.native}</p>
         <button type="button" aria-label="Previous phrase" onClick={onPrev} style={tapZoneLeft} />
         <button type="button" aria-label="Next phrase" onClick={onNext} style={tapZoneRight} />
       </div>
