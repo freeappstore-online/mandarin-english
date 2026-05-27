@@ -194,7 +194,11 @@ export default function App() {
   useEffect(() => { localStorage.setItem(NATIVE_LANG_KEY, nativeLang); }, [nativeLang]);
   useEffect(() => { localStorage.setItem(SPEECH_RATE_KEY, String(speechRate)); }, [speechRate]);
   useEffect(() => { localStorage.setItem(FONT_SCALE_KEY, String(fontScale)); }, [fontScale]);
-  useEffect(() => { document.documentElement.style.fontSize = `${16 * fontScale}px`; return () => { document.documentElement.style.fontSize = ""; }; }, [fontScale]);
+  useEffect(() => {
+    if (fontScale === 1) { document.documentElement.style.fontSize = ""; }
+    else { document.documentElement.style.fontSize = `${16 * fontScale}px`; }
+    return () => { document.documentElement.style.fontSize = ""; };
+  }, [fontScale]);
   useEffect(() => { localStorage.setItem(TAB_KEY, tab); }, [tab]);
 
   const attemptedPronunciation = useRef(new Set<string>());
@@ -282,6 +286,7 @@ export default function App() {
 
           {tab === "practice" && (
             <PracticeTab
+              key={`${pair.nativeLang}→${pair.targetLang}`}
               phrases={pairPhrases}
               onMarkPractised={(id) => update(id, { practiced: true })}
               onResetAll={resetPracticed}
@@ -459,7 +464,7 @@ function PhrasesTab(props: {
 }) {
   return (
     <>
-      <AddForm pair={props.pair} onAdd={props.onAdd} />
+      <AddForm key={`${props.pair.nativeLang}→${props.pair.targetLang}`} pair={props.pair} onAdd={props.onAdd} />
 
       {(props.topics.length > 0 || props.showOnlyUnpractised) && (
         <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", margin: "0.85rem 0 0.6rem" }}>
@@ -473,7 +478,7 @@ function PhrasesTab(props: {
               background: "var(--paper)",
               color: "var(--ink)",
               fontFamily: "inherit",
-              fontSize: "16px",
+              fontSize: "max(16px, 1rem)",
             }}
           >
             <option value="">All topics</option>
@@ -924,7 +929,7 @@ function SettingsTab({
             background: "var(--paper)",
             color: "var(--ink)",
             fontFamily: "inherit",
-            fontSize: "16px",
+            fontSize: "max(16px, 1rem)",
             width: "100%",
           }}
         >
@@ -960,7 +965,7 @@ function SettingsTab({
           onChange={(e) => onFontScaleChange(parseFloat(e.target.value))}
           style={{ width: "100%", accentColor: "var(--accent)" }}
         />
-        <span style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", color: "var(--muted)" }}>
+        <span style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--muted)" }}>
           <span>Smaller</span>
           <span>Larger</span>
         </span>
@@ -1105,7 +1110,7 @@ function Field({ label, value, onChange, placeholder, datalist, trailing }: {
           background: "var(--paper)",
           color: "var(--ink)",
           fontFamily: "inherit",
-          fontSize: "16px",
+          fontSize: "max(16px, 1rem)",
           width: "100%",
         }}
       />
