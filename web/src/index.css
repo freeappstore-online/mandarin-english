@@ -42,6 +42,34 @@
   }
 }
 
+/* Contrast overrides — applied via [data-contrast] on <html>. Bumps the
+   readability of secondary text and dividers, which is the part that
+   gets lost in low light. */
+:root[data-contrast="high"] {
+  --muted: #374151;
+  --line: #b8bcc4;
+  --line-strong: #6b7280;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-contrast="high"] {
+    --muted: #e5e7eb;
+    --line: #525252;
+    --line-strong: #737373;
+  }
+}
+:root[data-contrast="max"] {
+  --muted: #111111;
+  --line: #6b7280;
+  --line-strong: #374151;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-contrast="max"] {
+    --muted: #ffffff;
+    --line: #737373;
+    --line-strong: #9ca3af;
+  }
+}
+
 body {
   margin: 0;
   background: var(--paper);

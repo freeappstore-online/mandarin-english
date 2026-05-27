@@ -23,6 +23,7 @@ const PAIR_KEY = "mandarin-english:pair";
 const NATIVE_LANG_KEY = "mandarin-english:native-lang";
 const SPEECH_RATE_KEY = "mandarin-english:speech-rate";
 const FONT_SCALE_KEY = "mandarin-english:font-scale";
+const CONTRAST_KEY = "mandarin-english:contrast";
 const TAB_KEY = "mandarin-english:tab";
 const LEGACY_KEY = "mandarin-english:phrases";
 const LEGACY_DIRECTION_KEY = "mandarin-english:direction";
@@ -106,6 +107,16 @@ function loadFontScale(): number {
     if (raw) { const n = parseFloat(raw); if (n >= 0.8 && n <= 1.6) return n; }
   } catch {}
   return 1;
+}
+
+type Contrast = "normal" | "high" | "max";
+
+function loadContrast(): Contrast {
+  try {
+    const raw = localStorage.getItem(CONTRAST_KEY);
+    if (raw === "normal" || raw === "high" || raw === "max") return raw;
+  } catch {}
+  return "normal";
 }
 
 const SEED_PHRASES: Phrase[] = [
@@ -198,6 +209,7 @@ export default function App() {
   const [nativeLang, setNativeLang] = useState<string>(() => loadNativeLang());
   const [speechRate, setSpeechRate] = useState<number>(() => loadSpeechRate());
   const [fontScale, setFontScale] = useState<number>(() => loadFontScale());
+  const [contrast, setContrast] = useState<Contrast>(() => loadContrast());
   const [tab, setTab] = useState<Tab>(() => loadTab());
   const [topicFilter, setTopicFilter] = useState<string>("");
   const [showOnlyUnpractised, setShowOnlyUnpractised] = useState(false);
@@ -214,6 +226,12 @@ export default function App() {
     else { document.documentElement.style.fontSize = `${16 * fontScale}px`; }
     return () => { document.documentElement.style.fontSize = ""; };
   }, [fontScale]);
+  useEffect(() => { localStorage.setItem(CONTRAST_KEY, contrast); }, [contrast]);
+  useEffect(() => {
+    if (contrast === "normal") document.documentElement.removeAttribute("data-contrast");
+    else document.documentElement.setAttribute("data-contrast", contrast);
+    return () => { document.documentElement.removeAttribute("data-contrast"); };
+  }, [contrast]);
   useEffect(() => { localStorage.setItem(TAB_KEY, tab); }, [tab]);
 
   const attemptedPronunciation = useRef(new Set<string>());
@@ -319,6 +337,8 @@ export default function App() {
               onSpeechRateChange={setSpeechRate}
               fontScale={fontScale}
               onFontScaleChange={setFontScale}
+              contrast={contrast}
+              onContrastChange={setContrast}
             />
           )}
         </div>
@@ -892,12 +912,13 @@ function PracticeTab({ phrases, onMarkPractised, onResetAll }: { phrases: Phrase
 // ---------------------------------------------------------------------------
 
 function SettingsTab({
-  pair, onPairChange, knownPairs, nativeLang, onNativeLangChange, speechRate, onSpeechRateChange, fontScale, onFontScaleChange,
+  pair, onPairChange, knownPairs, nativeLang, onNativeLangChange, speechRate, onSpeechRateChange, fontScale, onFontScaleChange, contrast, onContrastChange,
 }: {
   pair: Pair; onPairChange: (p: Pair) => void; knownPairs: Pair[];
   nativeLang: string; onNativeLangChange: (lang: string) => void;
   speechRate: number; onSpeechRateChange: (rate: number) => void;
   fontScale: number; onFontScaleChange: (s: number) => void;
+  contrast: Contrast; onContrastChange: (c: Contrast) => void;
 }) {
   const [addingPair, setAddingPair] = useState(false);
   const [draftNative, setDraftNative] = useState(pair.nativeLang);
@@ -1025,6 +1046,40 @@ function SettingsTab({
           <span>Smaller</span>
           <span>Larger</span>
         </span>
+      </Section>
+
+      {/* Contrast */}
+      <Section title="Contrast">
+        <div style={{ display: "flex", gap: "0.4rem" }}>
+          {(["normal", "high", "max"] as const).map((c) => {
+            const active = contrast === c;
+            return (
+              <button
+                key={c}
+                type="button"
+                onClick={() => onContrastChange(c)}
+                style={{
+                  flex: 1,
+                  padding: "0.5rem 0.6rem",
+                  borderRadius: "0.5rem",
+                  border: active ? "1.5px solid var(--accent)" : "1px solid var(--line)",
+                  fontFamily: "inherit",
+                  fontWeight: 600,
+                  fontSize: "0.85rem",
+                  cursor: "pointer",
+                  background: active ? "var(--accent)" : "transparent",
+                  color: active ? "white" : "var(--ink)",
+                  textTransform: "capitalize",
+                }}
+              >
+                {c}
+              </button>
+            );
+          })}
+        </div>
+        <p style={{ fontSize: "11px", color: "var(--muted)", margin: 0 }}>
+          Boost the readability of secondary text in low light.
+        </p>
       </Section>
 
       {/* About */}
