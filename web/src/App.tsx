@@ -1,47 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Shell } from "./components/Shell";
-
-interface Phrase {
-  id: string;
-  nativeLang: string;
-  targetLang: string;
-  target: string;
-  native: string;
-  pronunciation: string;
-  topic: string;
-  practiced: boolean;
-  createdAt: number;
-}
-
-interface Pair {
-  nativeLang: string;
-  targetLang: string;
-}
-
-const STORAGE_KEY = "mandarin-english:phrases:v2";
-const PAIR_KEY = "mandarin-english:pair";
-const NATIVE_LANG_KEY = "mandarin-english:native-lang";
-const SPEECH_RATE_KEY = "mandarin-english:speech-rate";
-const FONT_SCALE_KEY = "mandarin-english:font-scale";
-const CONTRAST_KEY = "mandarin-english:contrast";
-const TAB_KEY = "mandarin-english:tab";
-const LEGACY_KEY = "mandarin-english:phrases";
-const LEGACY_DIRECTION_KEY = "mandarin-english:direction";
-
-const COMMON_LANGUAGES = [
-  "Mandarin", "English", "Spanish", "French", "German", "Italian",
-  "Portuguese", "Japanese", "Korean", "Cantonese", "Russian", "Arabic",
-  "Hindi", "Vietnamese", "Indonesian",
-];
-
-const LANG_CODES: Record<string, string> = {
-  Mandarin: "zh", English: "en", Spanish: "es", French: "fr", German: "de",
-  Italian: "it", Portuguese: "pt", Japanese: "ja", Korean: "ko",
-  Cantonese: "zh", Russian: "ru", Arabic: "ar", Hindi: "hi",
-  Vietnamese: "vi", Indonesian: "id",
-};
-
-const CJK_LANGS = new Set(["zh", "ja", "ko", "ar", "hi", "ru"]);
+import {
+  type Phrase, type Pair, type Contrast, type Tab,
+  STORAGE_KEY, PAIR_KEY, NATIVE_LANG_KEY, SPEECH_RATE_KEY, FONT_SCALE_KEY, CONTRAST_KEY, TAB_KEY,
+  COMMON_LANGUAGES, LANG_CODES, CJK_LANGS,
+  loadPhrases, loadPair, loadNativeLang, loadSpeechRate, loadFontScale, loadContrast, loadTab,
+  newId,
+} from "./storage";
 
 async function fetchPronunciation(text: string, lang: string): Promise<string | null> {
   const code = LANG_CODES[lang];
@@ -88,86 +53,6 @@ async function autoTranslate(text: string, sourceLang: string, targetLang: strin
   } catch { return null; }
 }
 
-function loadNativeLang(): string {
-  try { const raw = localStorage.getItem(NATIVE_LANG_KEY); if (raw) return raw; } catch {}
-  return "English";
-}
-
-function loadSpeechRate(): number {
-  try {
-    const raw = localStorage.getItem(SPEECH_RATE_KEY);
-    if (raw) { const n = parseFloat(raw); if (n >= 0.3 && n <= 2) return n; }
-  } catch {}
-  return 0.85;
-}
-
-function loadFontScale(): number {
-  try {
-    const raw = localStorage.getItem(FONT_SCALE_KEY);
-    if (raw) { const n = parseFloat(raw); if (n >= 0.8 && n <= 1.6) return n; }
-  } catch {}
-  return 1;
-}
-
-type Contrast = "normal" | "high" | "max";
-
-function loadContrast(): Contrast {
-  try {
-    const raw = localStorage.getItem(CONTRAST_KEY);
-    if (raw === "normal" || raw === "high" || raw === "max") return raw;
-  } catch {}
-  return "normal";
-}
-
-const SEED_PHRASES: Phrase[] = [
-  { id: "seed-1", nativeLang: "English", targetLang: "Mandarin", target: "你好,我叫…", native: "Hi, my name is…", pronunciation: "nǐ hǎo, wǒ jiào…", topic: "intro", practiced: false, createdAt: Date.now() - 4 },
-  { id: "seed-2", nativeLang: "English", targetLang: "Mandarin", target: "我来自悉尼。", native: "I'm from Sydney.", pronunciation: "wǒ lái zì xī ní.", topic: "intro", practiced: false, createdAt: Date.now() - 3 },
-  { id: "seed-3", nativeLang: "Mandarin", targetLang: "English", target: "What do you do for work?", native: "你做什么工作?", pronunciation: "", topic: "intro", practiced: false, createdAt: Date.now() - 2 },
-];
-
-function loadPhrases(): Phrase[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw !== null) {
-      const parsed = JSON.parse(raw) as unknown;
-      if (Array.isArray(parsed)) return parsed as Phrase[];
-    }
-  } catch {}
-  try {
-    const legacy = localStorage.getItem(LEGACY_KEY);
-    if (legacy !== null) {
-      const parsed = JSON.parse(legacy) as Array<{
-        id: string; direction: "to-mandarin" | "to-english"; target: string;
-        native: string; pinyin?: string; topic: string; practiced: boolean; createdAt: number;
-      }>;
-      if (Array.isArray(parsed)) {
-        return parsed.map((p) => ({
-          id: p.id,
-          nativeLang: p.direction === "to-mandarin" ? "English" : "Mandarin",
-          targetLang: p.direction === "to-mandarin" ? "Mandarin" : "English",
-          target: p.target, native: p.native, pronunciation: p.pinyin ?? "",
-          topic: p.topic, practiced: p.practiced, createdAt: p.createdAt,
-        }));
-      }
-    }
-  } catch {}
-  return SEED_PHRASES;
-}
-
-function loadPair(): Pair {
-  try {
-    const raw = localStorage.getItem(PAIR_KEY);
-    if (raw) { const parsed = JSON.parse(raw) as Pair; if (parsed.nativeLang && parsed.targetLang) return parsed; }
-    const legacyDir = localStorage.getItem(LEGACY_DIRECTION_KEY);
-    if (legacyDir === "to-english") return { nativeLang: "Mandarin", targetLang: "English" };
-  } catch {}
-  return { nativeLang: "English", targetLang: "Mandarin" };
-}
-
-function newId(): string {
-  return `p-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-}
-
 function speak(text: string, lang: string, rate?: number) {
   if (!window.speechSynthesis) return;
   window.speechSynthesis.cancel();
@@ -191,16 +76,6 @@ function useSwipe(onLeft: () => void, onRight: () => void, threshold = 50) {
       }
     },
   }), [onLeft, onRight, threshold]);
-}
-
-type Tab = "phrases" | "practice" | "settings";
-
-function loadTab(): Tab {
-  try {
-    const raw = localStorage.getItem(TAB_KEY);
-    if (raw === "phrases" || raw === "practice" || raw === "settings") return raw;
-  } catch {}
-  return "phrases";
 }
 
 export default function App() {
@@ -408,6 +283,8 @@ function BottomNav({ tab, onChange }: { tab: Tab; onChange: (t: Tab) => void }) 
             key={item.id}
             type="button"
             onClick={() => onChange(item.id)}
+            aria-current={active ? "page" : undefined}
+            aria-label={item.label}
             style={{
               flex: 1,
               display: "flex",
@@ -562,6 +439,7 @@ function AddForm({ pair, onAdd }: { pair: Pair; onAdd: (p: Omit<Phrase, "id" | "
   const listRef = useRef<HTMLDivElement>(null);
   const targetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nativeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const justAddedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const targetIsUserTyped = useRef(true);
   const nativeIsUserTyped = useRef(true);
   const pronIsUserTyped = useRef(false);
@@ -636,6 +514,7 @@ function AddForm({ pair, onAdd }: { pair: Pair; onAdd: (p: Omit<Phrase, "id" | "
     return () => {
       if (targetTimerRef.current) clearTimeout(targetTimerRef.current);
       if (nativeTimerRef.current) clearTimeout(nativeTimerRef.current);
+      if (justAddedTimerRef.current) clearTimeout(justAddedTimerRef.current);
     };
   }, []);
 
@@ -654,7 +533,8 @@ function AddForm({ pair, onAdd }: { pair: Pair; onAdd: (p: Omit<Phrase, "id" | "
     pronIsUserTyped.current = false;
     nativeIsUserTyped.current = true;
     setJustAdded(true);
-    setTimeout(() => setJustAdded(false), 1500);
+    if (justAddedTimerRef.current) clearTimeout(justAddedTimerRef.current);
+    justAddedTimerRef.current = setTimeout(() => setJustAdded(false), 1500);
     requestAnimationFrame(() => { listRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }); });
   }, [target, native, pronunciation, topic, pair, onAdd]);
 
