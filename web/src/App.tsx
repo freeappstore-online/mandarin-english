@@ -177,6 +177,8 @@ export default function App() {
   const [topicFilter, setTopicFilter] = useState<string>("");
   const [showOnlyUnpractised, setShowOnlyUnpractised] = useState(false);
 
+  useEffect(() => { setTopicFilter(""); }, [pair.nativeLang, pair.targetLang]);
+
   useEffect(() => { localStorage.setItem(STORAGE_KEY, JSON.stringify(phrases)); }, [phrases]);
   useEffect(() => { localStorage.setItem(PAIR_KEY, JSON.stringify(pair)); }, [pair]);
   useEffect(() => { localStorage.setItem(NATIVE_LANG_KEY, nativeLang); }, [nativeLang]);
@@ -455,7 +457,7 @@ function PhrasesTab(props: {
               background: "var(--paper)",
               color: "var(--ink)",
               fontFamily: "inherit",
-              fontSize: "0.85rem",
+              fontSize: "16px",
             }}
           >
             <option value="">All topics</option>
@@ -503,23 +505,31 @@ function AddForm({ pair, onAdd }: { pair: Pair; onAdd: (p: Omit<Phrase, "id" | "
   const nativeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const targetIsUserTyped = useRef(true);
   const nativeIsUserTyped = useRef(true);
+  const pronIsUserTyped = useRef(false);
   const translateVersion = useRef(0);
   const nativeRef = useRef(native);
   nativeRef.current = native;
   const targetRef = useRef(target);
   targetRef.current = target;
 
+  function cancelAllTimers() {
+    if (targetTimerRef.current) { clearTimeout(targetTimerRef.current); targetTimerRef.current = null; }
+    if (nativeTimerRef.current) { clearTimeout(nativeTimerRef.current); nativeTimerRef.current = null; }
+  }
+
   const handleTargetChange = useCallback((val: string) => {
     setTarget(val);
     targetIsUserTyped.current = true;
-    if (targetTimerRef.current) clearTimeout(targetTimerRef.current);
+    cancelAllTimers();
     if (!val.trim()) { setTranslatingField(null); return; }
     const version = ++translateVersion.current;
     targetTimerRef.current = setTimeout(() => {
-      fetchPronunciation(val, pair.targetLang).then((rom) => {
-        if (version !== translateVersion.current) return;
-        if (rom) setPronunciation(rom);
-      });
+      if (!pronIsUserTyped.current) {
+        fetchPronunciation(val, pair.targetLang).then((rom) => {
+          if (version !== translateVersion.current) return;
+          if (rom) setPronunciation(rom);
+        });
+      }
       if (!nativeIsUserTyped.current || !nativeRef.current.trim()) {
         setTranslatingField("native");
         autoTranslate(val, pair.targetLang, pair.nativeLang).then((result) => {
@@ -534,27 +544,34 @@ function AddForm({ pair, onAdd }: { pair: Pair; onAdd: (p: Omit<Phrase, "id" | "
   const handleNativeChange = useCallback((val: string) => {
     setNative(val);
     nativeIsUserTyped.current = true;
-    if (nativeTimerRef.current) clearTimeout(nativeTimerRef.current);
+    cancelAllTimers();
     if (!val.trim()) { setTranslatingField(null); return; }
-    if (!targetIsUserTyped.current || !targetRef.current.trim()) {
-      setTranslatingField("target");
-      const version = ++translateVersion.current;
-      nativeTimerRef.current = setTimeout(() => {
+    const version = ++translateVersion.current;
+    nativeTimerRef.current = setTimeout(() => {
+      if (!targetIsUserTyped.current || !targetRef.current.trim()) {
+        setTranslatingField("target");
         autoTranslate(val, pair.nativeLang, pair.targetLang).then((result) => {
           if (version !== translateVersion.current) return;
           if (result) {
             targetIsUserTyped.current = false;
             setTarget(result);
-            fetchPronunciation(result, pair.targetLang).then((rom) => {
-              if (version !== translateVersion.current) return;
-              if (rom) setPronunciation(rom);
-            });
+            if (!pronIsUserTyped.current) {
+              fetchPronunciation(result, pair.targetLang).then((rom) => {
+                if (version !== translateVersion.current) return;
+                if (rom) setPronunciation(rom);
+              });
+            }
           }
           setTranslatingField(null);
         });
-      }, 500);
-    }
+      }
+    }, 500);
   }, [pair.nativeLang, pair.targetLang]);
+
+  const handlePronunciationChange = useCallback((val: string) => {
+    setPronunciation(val);
+    pronIsUserTyped.current = val.trim().length > 0;
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -575,6 +592,7 @@ function AddForm({ pair, onAdd }: { pair: Pair; onAdd: (p: Omit<Phrase, "id" | "
     });
     setTarget(""); setNative(""); setPronunciation("");
     targetIsUserTyped.current = true;
+    pronIsUserTyped.current = false;
     nativeIsUserTyped.current = true;
     setJustAdded(true);
     setTimeout(() => setJustAdded(false), 1500);
@@ -606,10 +624,14 @@ function AddForm({ pair, onAdd }: { pair: Pair; onAdd: (p: Omit<Phrase, "id" | "
           onChange={handleNativeChange}
           trailing={translatingField === "native" ? "translating..." : undefined}
         />
-        <Field label="Pronunciation" value={pronunciation} onChange={setPronunciation} />
+        <Field label="Pronunciation" value={pronunciation} onChange={handlePronunciationChange} />
         <Field label="Topic" value={topic} onChange={setTopic} placeholder="intro, weather, food..." />
         <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-          <button type="submit" style={primaryButton} disabled={!target.trim() || !native.trim()}>
+          <button
+            type="submit"
+            style={{ ...primaryButton, ...(!target.trim() || !native.trim() ? { opacity: 0.4, cursor: "default" } : {}) }}
+            disabled={!target.trim() || !native.trim()}
+          >
             Add phrase
           </button>
           {justAdded && <span style={{ fontSize: "0.82rem", color: "var(--accent)", fontWeight: 600 }}>Added!</span>}
@@ -852,7 +874,11 @@ function SettingsTab({
               {COMMON_LANGUAGES.map((l) => <option key={l} value={l} />)}
             </datalist>
             <div style={{ display: "flex", gap: "0.5rem" }}>
-              <button type="submit" style={primaryButton} disabled={!draftNative.trim() || !draftTarget.trim() || draftNative.trim() === draftTarget.trim()}>
+              <button
+                type="submit"
+                style={{ ...primaryButton, ...(!draftNative.trim() || !draftTarget.trim() || draftNative.trim() === draftTarget.trim() ? { opacity: 0.4, cursor: "default" } : {}) }}
+                disabled={!draftNative.trim() || !draftTarget.trim() || draftNative.trim() === draftTarget.trim()}
+              >
                 Add pair
               </button>
               <button type="button" onClick={() => setAddingPair(false)} style={secondaryButton}>Cancel</button>
@@ -861,7 +887,7 @@ function SettingsTab({
         ) : (
           <button
             type="button"
-            onClick={() => { setDraftNative(pair.nativeLang); setDraftTarget(pair.targetLang); setAddingPair(true); }}
+            onClick={() => { setDraftNative(nativeLang); setDraftTarget(""); setAddingPair(true); }}
             style={{ ...secondaryButton, fontSize: "0.85rem", padding: "0.45rem 0.9rem" }}
           >
             + Add pair
@@ -881,7 +907,7 @@ function SettingsTab({
             background: "var(--paper)",
             color: "var(--ink)",
             fontFamily: "inherit",
-            fontSize: "0.9rem",
+            fontSize: "16px",
             width: "100%",
           }}
         >
@@ -1045,7 +1071,7 @@ function Field({ label, value, onChange, placeholder, datalist, trailing }: {
           background: "var(--paper)",
           color: "var(--ink)",
           fontFamily: "inherit",
-          fontSize: "0.92rem",
+          fontSize: "16px",
           width: "100%",
         }}
       />
