@@ -1,23 +1,21 @@
-import { render, screen } from "@testing-library/react";
+import { render } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import App from "../App";
-import { Shell } from "../components/Shell";
 
 describe("App", () => {
   it("renders without crashing", () => {
     render(<App />);
   });
 
-  it("Shell component renders with FreeAppStore link", () => {
-    render(<Shell>content</Shell>);
-    const link = screen.getByRole("link", { name: /freeappstore/i });
-    expect(link).toBeInTheDocument();
-    expect(link).toHaveAttribute("href", "https://freeappstore.online");
-  });
-
-  it("contains the sidebar on desktop layout", () => {
+  it("renders bottom navigation with three tabs", () => {
     const { container } = render(<App />);
-    const aside = container.querySelector("aside");
-    expect(aside).toBeInTheDocument();
+    const nav = container.querySelector("nav");
+    expect(nav).not.toBeNull();
+    const buttons = nav!.querySelectorAll("button");
+    expect(buttons.length).toBe(3);
+    const labels = Array.from(buttons).map((b) => b.textContent?.trim());
+    expect(labels).toContain("Phrases");
+    expect(labels).toContain("Practice");
+    expect(labels).toContain("Settings");
   });
 });

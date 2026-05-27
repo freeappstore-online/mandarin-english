@@ -40,27 +40,24 @@ describe("HTML compliance", () => {
     expect(html).toMatch(/<meta\s[^>]*name="viewport"/);
   });
 
-  it("has manifest link", () => {
-    expect(html).toMatch(/<link\s[^>]*rel="manifest"/);
+});
+
+describe("PWA manifest (via vite-plugin-pwa)", () => {
+  const viteConfig = read(web, "vite.config.ts");
+
+  it("VitePWA plugin is configured with manifest", () => {
+    expect(viteConfig).toContain("VitePWA");
+    expect(viteConfig).toContain("manifest");
+    expect(viteConfig).toContain("start_url");
+    expect(viteConfig).toContain("display");
   });
 });
 
-describe("PWA manifest", () => {
-  it("public/manifest.json exists and has name, display, start_url", () => {
-    const manifestPath = resolve(web, "public/manifest.json");
-    expect(existsSync(manifestPath)).toBe(true);
-    const manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
-    expect(manifest).toHaveProperty("name");
-    expect(manifest).toHaveProperty("display");
-    expect(manifest).toHaveProperty("start_url");
-  });
-});
-
-describe("Shell compliance", () => {
-  const shell = read(web, "src/components/Shell.tsx");
+describe("App compliance", () => {
+  const app = read(web, "src/App.tsx");
 
   it("contains freeappstore.online link", () => {
-    expect(shell).toContain("freeappstore.online");
+    expect(app).toContain("freeappstore.online");
   });
 });
 
