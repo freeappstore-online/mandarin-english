@@ -466,24 +466,26 @@ function PhrasesTab(props: {
     <>
       <AddForm key={`${props.pair.nativeLang}→${props.pair.targetLang}`} pair={props.pair} onAdd={props.onAdd} />
 
-      {(props.topics.length > 0 || props.showOnlyUnpractised) && (
-        <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", margin: "0.85rem 0 0.6rem" }}>
-          <select
-            value={props.topicFilter}
-            onChange={(e) => props.onTopicFilterChange(e.target.value)}
-            style={{
-              padding: "0.4rem 0.5rem",
-              border: "1px solid var(--line)",
-              borderRadius: "0.5rem",
-              background: "var(--paper)",
-              color: "var(--ink)",
-              fontFamily: "inherit",
-              fontSize: "max(16px, 1rem)",
-            }}
-          >
-            <option value="">All topics</option>
-            {props.topics.map((t) => <option key={t} value={t}>{t}</option>)}
-          </select>
+      {props.phrases.length > 0 && (
+        <div style={{ display: "flex", gap: "0.6rem", flexWrap: "wrap", margin: "0.85rem 0 0.6rem", alignItems: "center" }}>
+          {props.topics.length > 0 && (
+            <select
+              value={props.topicFilter}
+              onChange={(e) => props.onTopicFilterChange(e.target.value)}
+              style={{
+                padding: "0.4rem 0.5rem",
+                border: "1px solid var(--line)",
+                borderRadius: "0.5rem",
+                background: "var(--paper)",
+                color: "var(--ink)",
+                fontFamily: "inherit",
+                fontSize: "max(16px, 1rem)",
+              }}
+            >
+              <option value="">All topics</option>
+              {props.topics.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          )}
           <label style={{ display: "flex", alignItems: "center", gap: "0.35rem", fontSize: "0.85rem" }}>
             <input
               type="checkbox"
@@ -717,8 +719,10 @@ function EditForm({ phrase, onSave, onCancel }: { phrase: Phrase; onSave: (patch
   const [native, setNative] = useState(phrase.native);
   const [pronunciation, setPronunciation] = useState(phrase.pronunciation);
   const [topic, setTopic] = useState(phrase.topic);
+  const canSave = target.trim().length > 0 && native.trim().length > 0;
   function submit(e: React.FormEvent) {
     e.preventDefault();
+    if (!canSave) return;
     onSave({ target: target.trim(), native: native.trim(), pronunciation: pronunciation.trim(), topic: topic.trim() });
   }
   return (
@@ -728,7 +732,7 @@ function EditForm({ phrase, onSave, onCancel }: { phrase: Phrase; onSave: (patch
       <Field label="Pronunciation" value={pronunciation} onChange={setPronunciation} />
       <Field label="Topic" value={topic} onChange={setTopic} />
       <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.2rem" }}>
-        <button type="submit" style={primaryButton}>Save</button>
+        <button type="submit" style={{ ...primaryButton, ...(!canSave ? { opacity: 0.4, cursor: "default" } : {}) }} disabled={!canSave}>Save</button>
         <button type="button" onClick={onCancel} style={secondaryButton}>Cancel</button>
       </div>
     </form>
@@ -804,9 +808,9 @@ function PracticeTab({ phrases, onMarkPractised, onResetAll }: { phrases: Phrase
         </p>
         {p.pronunciation && <p style={{ color: "var(--muted)", fontStyle: "italic", fontSize: "1.05rem", margin: 0 }}>{p.pronunciation}</p>}
         <p style={{ color: "var(--muted)", fontSize: "1.05rem", margin: 0 }}>{p.native}</p>
-        {p.topic && (
+        {(p.topic || p.practiced) && (
           <p style={{ color: "var(--muted)", fontSize: "0.75rem", textTransform: "uppercase", letterSpacing: "0.08em", margin: 0 }}>
-            {p.topic}
+            {p.topic}{p.topic && p.practiced ? " · " : ""}{p.practiced ? "practised" : ""}
           </p>
         )}
       </div>
